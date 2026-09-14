@@ -40,6 +40,7 @@ struct SRiskConfig
    int               max_positions_per_strategy;
    double            correlation_cap_pct;     // combined risk across correlated symbols
    bool              require_stop_loss;       // always true; kept explicit
+   double            min_stop_atr_mult;       // reject stops closer than this x ATR
    //--- risk ramp
    datetime          deployment_start;
    double            phase1_risk_pct;         // 0.25
@@ -266,6 +267,7 @@ public:
       m_risk.max_positions_per_strategy = m_json.GetInt("risk.max_positions_per_strategy", 1);
       m_risk.correlation_cap_pct        = m_json.GetDouble("risk.correlation_cap_pct", 2.0);
       m_risk.require_stop_loss          = m_json.GetBool("risk.require_stop_loss", true);
+      m_risk.min_stop_atr_mult          = m_json.GetDouble("risk.min_stop_atr_mult", 0.5);
 
       m_risk.deployment_start           = ParseDate(m_json.GetString("risk.ramp.deployment_start", ""),
                                                     TimeCurrent());

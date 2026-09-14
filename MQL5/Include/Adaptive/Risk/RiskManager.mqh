@@ -574,6 +574,24 @@ public:
          return Reject(v, intent);
         }
 
+      //--- 4b. a stop closer than a fraction of ATR is noise, not a stop.
+      //--- Independent of the strategy-side floor on purpose: this is the
+      //--- backstop that makes a tiny-stop/huge-lots trade impossible even
+      //--- if a new strategy forgets to apply the floor, and it also covers
+      //--- brokers that report SYMBOL_TRADE_STOPS_LEVEL as 0.
+      if(ctx.atr_ref > 0.0 && m_cfg.Risk().min_stop_atr_mult > 0.0)
+        {
+         double min_dist = m_cfg.Risk().min_stop_atr_mult * ctx.atr_ref;
+         double dist     = MathAbs(intent.entry_price - intent.stop_loss);
+         if(dist < min_dist)
+           {
+            v.reason = BLOCK_INVALID_STOP;
+            v.detail = StringFormat("stop %.5f is %.2f ATR from entry, minimum %.2f",
+                                    dist, dist / ctx.atr_ref, m_cfg.Risk().min_stop_atr_mult);
+            return Reject(v, intent);
+           }
+        }
+
       //--- 5. spread sanity -------------------------------------------
       double max_spread = (StringFind(intent.symbol, "XAU") >= 0
                            ? m_cfg.Risk().max_spread_points_xau

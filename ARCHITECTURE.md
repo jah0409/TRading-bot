@@ -295,11 +295,26 @@ both live and tester read one format.
 
 ### 7.3 Walk-forward testing
 
-Walk-forward validation cannot live inside the EA — it needs to run many
-parameter sets over many windows, offline. The EA side of the contract is
-done: every trade is logged with its regime, strategy, R-multiple and risk.
-The harness that consumes those logs is a separate tool
-(see `docs/WALKFORWARD.md`).
+Walk-forward validation cannot live inside the EA — it needs many parameter
+sets over many windows, offline. `tools/walkforward.py` does it; see
+`docs/WALKFORWARD.md`.
+
+Running it found a live-account bug worth repeating here. `mean_rev_bb`
+reported **+0.98R per trade on a pure random walk**, which is impossible. The
+cause was in the strategy, not the harness: its stop is anchored to a *level*
+(the Bollinger band) while the fill happens at *market*, so when price closes
+far past the band the two collide, risk collapses toward zero, and R explodes.
+Across 8,286 signals, 29% of stops were under 0.5 ATR and 1% were on the wrong
+side of the entry.
+
+Live that is worse than a bad backtest: `CalcLots` divides the risk budget by
+the stop distance, so a near-zero stop asks for an enormous position on a stop
+the spread alone would remove. Now floored centrally in
+`CStrategyBase::TryEnter` and independently rejected in
+`CRiskManager::Approve` (`risk.min_stop_atr_mult`, default 0.5 ATR).
+
+The lesson generalises: **any strategy that anchors a stop to a level while
+filling at market has this failure mode.** `breakout_dc` had it too.
 
 Pruning is deliberately **report-only**. `IsPruneCandidate()` flags
 strategies with ≥40 trades and negative expectancy into the strategy log;
@@ -325,9 +340,11 @@ uncalibrated model, is how you end up with one strategy left and no idea why.
 | Order execution, retries, trailing | implemented |
 | Virtual accounts, expectancy matrix, allocation | implemented |
 | Strategy entry rules | written, **uncalibrated** (`=== TUNE ME ===`) |
+| Strategy walk-forward harness + null test | implemented, self-tested |
+| Minimum stop distance (strategy + risk backstop) | implemented |
 | News HTTP API parser | **stub** |
 | Correlation model (XAUUSD↔US100) | **stub** — placeholder counts same-direction risk |
-| Walk-forward harness for *strategies* | **not started** — offline tool |
+
 
 ---
 
@@ -340,6 +357,7 @@ uncalibrated model, is how you end up with one strategy left and no idea why.
 2. **Calibrate the regime thresholds** per symbol — run `RegimeExport.mq5`,
    then `tools/calibrate_regime.py`. See `docs/CALIBRATION.md`. Gold and
    US100 will not share an ADX threshold.
-3. **Walk-forward one strategy** end to end, prove the harness.
-4. **Arm with one strategy**, phase 1, one symbol.
-5. Add strategies only as each earns its place out of sample.
+4. **Walk-forward each strategy** (`tools/null_test.py` first, then
+   `tools/walkforward.py`). Ship anything that fails with `"enabled": false`.
+5. **Arm with one strategy**, phase 1, one symbol.
+6. Add strategies only as each earns its place out of sample.

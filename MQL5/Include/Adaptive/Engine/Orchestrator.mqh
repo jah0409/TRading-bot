@@ -154,6 +154,14 @@ private:
       if(!m_regime.Snapshot(symbol, ctx.regime))
          return false;
 
+      //--- H1 ATR is the reference for stop-distance sanity checks; fall
+      //--- back down the timeframes while the H1 indicator is still warming
+      ctx.atr_ref = ctx.regime.tf[TF_SLOT_H1].atr;
+      if(ctx.atr_ref <= 0.0)
+         ctx.atr_ref = ctx.regime.tf[TF_SLOT_M15].atr;
+      if(ctx.atr_ref <= 0.0)
+         ctx.atr_ref = ctx.regime.tf[TF_SLOT_H4].atr;
+
       return true;
      }
 

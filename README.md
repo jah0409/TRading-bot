@@ -30,10 +30,14 @@ MQL5/
   Files/Adaptive/
     config.json                          all tuning lives here
     calendar.csv                         fallback calendar (required for backtests)
-tools/                                   offline calibration (Python)
+tools/                                   offline research (Python)
   regime_lib.py                          mirror of RegimeFeatures.mqh
-  calibrate_regime.py                    fit thresholds, emit config
-  make_synthetic.py                      known-regime fixture for the self-test
+  calibrate_regime.py                    fit regime thresholds, emit config
+  strategy_lib.py                        mirrors of the five .mqh strategies
+  backtest.py                            bar-by-bar simulator, results in R
+  walkforward.py                         anchored folds, ACCEPT/REJECT verdict
+  null_test.py                           random-walk test for look-ahead bias
+  make_synthetic.py                      known-regime fixture
 docs/CALIBRATION.md                      how to calibrate the classifier
 docs/WALKFORWARD.md                      out-of-sample validation process
 ```
@@ -95,7 +99,10 @@ backtest will do nothing.
 - **`aggregate_stop_cap_pct` ships at 6%, not the 10% in the brief** — 10%
   of simultaneous stops is an instant account breach. ARCHITECTURE.md §3.
 - Correlation between XAUUSD and US100 is a placeholder, not a model.
-- Strategy parameters are first guesses. Walk-forward them before arming.
+- Strategy parameters are first guesses. Walk-forward them before arming
+  (`tools/walkforward.py`), and run `tools/null_test.py` first every time.
+- **`momo_pullback`'s shipped defaults are too tight** - one signal in 40,000
+  bars. Walk-forward it and take the fitted parameters before enabling.
 - Regime thresholds ship as defaults calibrated on neither symbol. Fit them
   per symbol with `tools/calibrate_regime.py` — see docs/CALIBRATION.md.
 - **Chop detection is the classifier's weak point.** On the synthetic fixture

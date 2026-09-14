@@ -129,6 +129,8 @@ struct SMarketContext
    double            news_size_mult;       // <=1.0 size scaler
    double            news_stop_mult;       // >=1.0 stop widener
    string            news_label;           // e.g. "CPI in 00:42"
+   //--- reference ATR (H1) for stop-distance sanity checks
+   double            atr_ref;
    //--- live pricing / symbol metrics
    double            bid;
    double            ask;

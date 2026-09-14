@@ -27,6 +27,7 @@
     "max_positions_per_strategy": 1,
     "correlation_cap_pct": 2.0,
     "require_stop_loss": true,
+    "min_stop_atr_mult": 0.5,
 
     "ramp": {
       "deployment_start": "2026.09.14 00:00",

@@ -336,6 +336,34 @@ public:
          return false;
         }
 
+      //--- Floor the stop distance. A strategy that anchors its stop to a
+      //--- LEVEL (a Bollinger band, a channel midpoint) while filling at
+      //--- MARKET can have the two collide when price runs past that level:
+      //--- the stop lands on top of the entry, risk collapses toward zero,
+      //--- and CalcLots then sizes an enormous position off a stop that the
+      //--- spread alone will take out. Walk-forward measured 29% of
+      //--- mean-reversion signals under 0.5 ATR and 1% on the wrong side
+      //--- entirely. Fixed here, centrally, so every strategy inherits it.
+      {
+       double entry_px = (sig.entry_price > 0.0 ? sig.entry_price
+                          : (sig.direction == ORDER_TYPE_BUY ? ctx.ask : ctx.bid));
+       double min_dist = m_cfg.Risk().min_stop_atr_mult * ctx.atr_ref;
+       if(min_dist > 0.0)
+         {
+          bool   is_buy = (sig.direction == ORDER_TYPE_BUY);
+          double signed_dist = (is_buy ? entry_px - sig.stop_loss : sig.stop_loss - entry_px);
+          if(signed_dist < min_dist)
+            {
+             double fixed = (is_buy ? entry_px - min_dist : entry_px + min_dist);
+             if(m_log != NULL && signed_dist <= 0.0)
+                m_log.Warn(StringFormat("%s %s: stop was on the wrong side of entry "
+                                        "(%.5f vs %.5f); pushed to %.5f",
+                                        m_id, ctx.symbol, sig.stop_loss, entry_px, fixed));
+             sig.stop_loss = fixed;
+            }
+         }
+      }
+
       //--- widen the stop when volatility is expected (news caution)
       if(ctx.news_stop_mult > 1.0)
         {

@@ -57,19 +57,22 @@ def ramp(x, lo, hi):
 # Wilder indicators. MT5's iATR and iADX both use Wilder (SMMA) smoothing.
 # ---------------------------------------------------------------------------
 def wilder_smooth(values: np.ndarray, period: int) -> np.ndarray:
-    """First value is the simple mean of the first `period`; then SMMA."""
+    """First value is the simple mean of the first `period`; then SMMA.
+
+    prev*(n-1)/n + cur/n is exactly an EWM with alpha = 1/n and adjust=False,
+    so this defers to pandas' C implementation. The harness calls this tens of
+    thousands of times; the Python loop it replaces was the single biggest
+    cost in a walk-forward run.
+    """
     v = np.asarray(values, dtype=float)
-    out = np.full(len(v), np.nan)
-    if len(v) < period:
-        return out
-    seed = np.nanmean(v[:period])
-    out[period - 1] = seed
-    prev = seed
-    for i in range(period, len(v)):
-        cur = v[i] if np.isfinite(v[i]) else 0.0
-        prev = (prev * (period - 1) + cur) / period
-        out[i] = prev
-    return out
+    n = len(v)
+    if n < period:
+        return np.full(n, np.nan)
+    seeded = np.where(np.isfinite(v), v, 0.0).astype(float)
+    s = pd.Series(seeded)
+    s.iloc[:period - 1] = np.nan
+    s.iloc[period - 1] = float(np.nanmean(v[:period]))
+    return s.ewm(alpha=1.0 / period, adjust=False, ignore_na=True).mean().to_numpy()
 
 
 def true_range(high, low, close) -> np.ndarray:
