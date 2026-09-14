@@ -18,6 +18,7 @@
 #include "../Core/Types.mqh"
 #include "../Core/Config.mqh"
 #include "../Core/Logger.mqh"
+#include "CorrelationModel.mqh"
 
 //--- per-strategy live exposure ------------------------------------
 struct SStrategyExposure
@@ -31,8 +32,9 @@ struct SStrategyExposure
 class CRiskManager
   {
 private:
-   CConfig          *m_cfg;
-   CLogger          *m_log;
+   CConfig            *m_cfg;
+   CLogger            *m_log;
+   CCorrelationModel  *m_corr;
 
    //--- account state -------------------------------------------------
    double            m_balance;
@@ -182,7 +184,7 @@ private:
      }
 
 public:
-                     CRiskManager(void) : m_cfg(NULL), m_log(NULL), m_balance(0), m_equity(0),
+                     CRiskManager(void) : m_cfg(NULL), m_log(NULL), m_corr(NULL), m_balance(0), m_equity(0),
                                           m_initial_balance(0), m_peak_equity(0),
                                           m_day_start_equity(0), m_day_start_balance(0),
                                           m_current_day(0), m_day_pnl(0), m_day_pnl_pct(0),
@@ -205,10 +207,11 @@ public:
       m_known_ids[n]    = id;
      }
 
-   bool              Init(CConfig *cfg, CLogger *log)
+   bool              Init(CConfig *cfg, CLogger *log, CCorrelationModel *corr = NULL)
      {
-      m_cfg = cfg;
-      m_log = log;
+      m_cfg  = cfg;
+      m_log  = log;
+      m_corr = corr;
       if(m_cfg == NULL)
          return false;
 
@@ -679,13 +682,11 @@ public:
          return Reject(v, intent);
         }
 
-      //--- 11. correlation ---------------------------------------------
-      // === STUB ===
-      // XAUUSD and US100 both carry a large USD/real-rates factor and go
-      // risk-off together. Intended: keep a rolling correlation matrix and
-      // reject when |rho| > threshold and combined same-direction risk
-      // would exceed correlation_cap_pct. Placeholder below only counts
-      // same-direction risk across all symbols.
+      //--- 11. correlation-adjusted concentration ----------------------
+      //--- This is an ADDITIONAL constraint on top of the absolute
+      //--- sum-of-stops cap above, never a relaxation of it: correlation
+      //--- describes typical behaviour, and what breaches a prop account
+      //--- is the atypical day when everything gaps at once.
       if(!CheckCorrelationCap(intent, v.detail))
         {
          v.reason = BLOCK_CORRELATION;
@@ -752,31 +753,80 @@ private:
       return n;
      }
 
-   //--- === STUB === replace with a real rolling-correlation model
+   //+---------------------------------------------------------------+
+   //| Correlation-adjusted concentration cap.                        |
+   //|                                                                |
+   //| Builds the signed risk vector across open positions plus the   |
+   //| proposed one, collapses same-symbol exposure, and asks the      |
+   //| correlation model for the portfolio risk. Two 1% longs in       |
+   //| instruments correlated at 0.8 come out near 1.9%, not 2.0%;     |
+   //| a genuine long/short hedge comes out near zero.                 |
+   //+---------------------------------------------------------------+
    bool              CheckCorrelationCap(const STradeIntent &intent, string &detail)
      {
-      double same_dir_risk = 0.0;
+      if(m_corr == NULL || !m_corr.Enabled())
+         return true;
+
+      //--- one slot per configured symbol; net the signed risk into it
+      int nsym = m_cfg.SymbolCount();
+      if(nsym <= 0)
+         return true;
+
+      string syms[];
+      double signed_risk[];
+      ArrayResize(syms, nsym);
+      ArrayResize(signed_risk, nsym);
+      for(int i = 0; i < nsym; i++)
+        {
+         syms[i] = m_cfg.SymbolAt(i);
+         signed_risk[i] = 0.0;
+        }
+
       for(int i = 0; i < PositionsTotal(); i++)
         {
          ulong t = PositionGetTicket(i);
          if(t == 0 || !IsOurMagic(PositionGetInteger(POSITION_MAGIC)))
             continue;
-         ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-         bool same = ((ptype == POSITION_TYPE_BUY  && intent.direction == ORDER_TYPE_BUY) ||
-                      (ptype == POSITION_TYPE_SELL && intent.direction == ORDER_TYPE_SELL));
-         if(!same)
+
+         string sym = PositionGetString(POSITION_SYMBOL);
+         int slot = -1;
+         for(int k = 0; k < nsym; k++)
+            if(syms[k] == sym)
+              {
+               slot = k;
+               break;
+              }
+         if(slot < 0)
             continue;
-         same_dir_risk += PositionRiskMoney(PositionGetString(POSITION_SYMBOL), ptype,
-                                            PositionGetDouble(POSITION_VOLUME),
-                                            PositionGetDouble(POSITION_PRICE_OPEN),
-                                            PositionGetDouble(POSITION_SL));
+
+         ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+         double risk = PositionRiskMoney(sym, ptype,
+                                         PositionGetDouble(POSITION_VOLUME),
+                                         PositionGetDouble(POSITION_PRICE_OPEN),
+                                         PositionGetDouble(POSITION_SL));
+         signed_risk[slot] += (ptype == POSITION_TYPE_BUY ? risk : -risk);
         }
+
+      //--- add the trade being proposed
+      for(int k = 0; k < nsym; k++)
+         if(syms[k] == intent.symbol)
+           {
+            signed_risk[k] += (intent.direction == ORDER_TYPE_BUY
+                               ? intent.risk_money : -intent.risk_money);
+            break;
+           }
+
       double basis = RiskBasis();
-      double pct = (basis > 0.0 ? (same_dir_risk + intent.risk_money) / basis * 100.0 : 100.0);
+      if(basis <= 0.0)
+         return true;
+
+      double port = m_corr.PortfolioRisk(syms, signed_risk, nsym);
+      double pct  = port / basis * 100.0;
+
       if(pct > m_cfg.Risk().correlation_cap_pct + 1e-6)
         {
-         detail = StringFormat("same-direction risk %.3f%% > cap %.3f%%",
-                               pct, m_cfg.Risk().correlation_cap_pct);
+         detail = StringFormat("correlation-adjusted concentration %.3f%% > cap %.3f%% [%s]",
+                               pct, m_cfg.Risk().correlation_cap_pct, m_corr.Describe());
          return false;
         }
       return true;

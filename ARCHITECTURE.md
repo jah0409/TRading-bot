@@ -124,6 +124,39 @@ Two further guards are already in `CalcLots()`:
 - The risk basis is `min(balance, equity, initial_balance)` — position size
   shrinks automatically in drawdown, and never inflates after a good run.
 
+### Correlation: XAUUSD and US100 are not two independent bets
+
+Both carry a large USD and real-rates factor and both go risk-off together.
+Long 1% of each is not 2% spread across two ideas — much of the time it is
+closer to a single 2% bet on one factor.
+
+`CCorrelationModel` keeps a rolling correlation of log returns (H1, 500 bars,
+refreshed every 15 min, **aligned on bar time** so a holiday gap cannot
+silently compare Tuesday with Wednesday). The risk manager then caps
+*correlation-adjusted concentration*:
+
+```
+portfolio risk = sqrt( SUM_i SUM_j  r_i r_j  rho_ij )        r signed
+```
+
+Signed risk is what makes this useful: two longs in correlated instruments
+add, a long/short pair largely cancels. `tools/test_correlation.py` validates
+the formula against Monte Carlo (worst error 0.12%) and prints where the cap
+engages:
+
+| exposure (ρ = +0.8) | adjusted | naive sum | |
+|---|---|---|---|
+| 1% XAU long + 1% IDX long | 1.90% | 2% | allowed |
+| 2× 1% XAU + 1% IDX long | 2.86% | 3% | blocked |
+| 1% long + 1% short | 0.63% | 2% | allowed — a hedge is not concentration |
+
+**This only ever adds a constraint.** `aggregate_stop_cap_pct` stays the plain
+arithmetic sum of absolute stops, because correlation describes *typical*
+behaviour and what breaches a prop account is the atypical day when everything
+gaps through its stop at once. A correlation estimate must never be allowed to
+justify carrying more total risk. A pair it cannot measure is assumed to be
+correlated at +1.0 — fail safe, the same posture as the news filter.
+
 ### Risk ramp
 
 | Phase | Risk/trade | Max concurrent strategies |
@@ -342,8 +375,8 @@ uncalibrated model, is how you end up with one strategy left and no idea why.
 | Strategy entry rules | written, **uncalibrated** (`=== TUNE ME ===`) |
 | Strategy walk-forward harness + null test | implemented, self-tested |
 | Minimum stop distance (strategy + risk backstop) | implemented |
-| News HTTP API parser | **stub** |
-| Correlation model (XAUUSD↔US100) | **stub** — placeholder counts same-direction risk |
+| News HTTP API parser | **stub** — deliberately left; CSV + native calendar cover live and tester |
+| Correlation model (XAUUSD↔US100) | implemented, formula validated vs Monte Carlo |
 
 
 ---

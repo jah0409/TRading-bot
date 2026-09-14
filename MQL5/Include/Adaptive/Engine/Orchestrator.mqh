@@ -27,6 +27,7 @@
 #include "../Core/Logger.mqh"
 #include "../Regime/RegimeDetector.mqh"
 #include "../Risk/RiskManager.mqh"
+#include "../Risk/CorrelationModel.mqh"
 #include "../News/NewsFilter.mqh"
 #include "../Execution/OrderExecutor.mqh"
 #include "../Portfolio/PerformanceTracker.mqh"
@@ -52,6 +53,7 @@ private:
    CLogger              m_log;
    CRegimeDetector      m_regime;
    CRiskManager         m_risk;
+   CCorrelationModel    m_corr;
    CNewsFilter          m_news;
    COrderExecutor       m_exec;
    CPerformanceTracker  m_perf;
@@ -242,7 +244,10 @@ public:
         }
 
       //--- 2. components -------------------------------------------------
-      if(!m_risk.Init(GetPointer(m_cfg), GetPointer(m_log)))
+      //--- correlation first: the risk manager holds a pointer to it
+      m_corr.Init(GetPointer(m_cfg), GetPointer(m_log));
+
+      if(!m_risk.Init(GetPointer(m_cfg), GetPointer(m_log), GetPointer(m_corr)))
         {
          m_log.Warn("risk manager init failed");
          return false;
@@ -321,10 +326,11 @@ public:
       m_ready = true;
 
       m_log.Info(StringFormat("ready: %d strategies, %d symbols, phase=%d, risk=%.2f%%/trade, "
-                              "max concurrent=%d, news feed=%s",
+                              "max concurrent=%d, news feed=%s, corr=%s",
                               ArraySize(m_strategies), m_cfg.SymbolCount(),
                               (int)m_risk.Phase(), m_risk.CurrentRiskPct(),
-                              m_risk.MaxConcurrentStrategies(), m_news.FeedSource()));
+                              m_risk.MaxConcurrentStrategies(), m_news.FeedSource(),
+                              (m_corr.Enabled() ? m_corr.Describe() : "off")));
       return true;
      }
 
@@ -356,8 +362,9 @@ public:
       //--- 1. account state and the hard limits ------------------------
       m_risk.Update();
 
-      //--- 2. calendar (self-rate-limiting) ----------------------------
+      //--- 2. calendar and correlation (both self-rate-limiting) -------
       m_news.Refresh(false);
+      m_corr.Update(false);
 
       //--- 3. kill switch / floor breach: flatten before anything else -
       if(m_risk.NeedsFlatten())
@@ -611,6 +618,9 @@ public:
                     (m_risk.IsDailyLocked() ? "YES" : "no"),
                     (m_risk.IsKilled() ? "YES" : "no"),
                     (m_news.FeedOk() ? m_news.FeedSource() : "STALE"));
+
+      if(m_corr.Enabled())
+         s += "corr[" + m_corr.Describe() + "] ";
 
       for(int i = 0; i < ArraySize(m_strategies); i++)
         {

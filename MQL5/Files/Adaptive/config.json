@@ -118,6 +118,16 @@
     "order_comment_prefix": "ADPT"
   },
 
+  "correlation": {
+    "_comment": "Rolling correlation between traded symbols. Caps CONCENTRATED directional exposure; it never relaxes risk.aggregate_stop_cap_pct, which stays the plain sum of absolute stops.",
+    "enabled": true,
+    "timeframe_minutes": 60,
+    "lookback_bars": 500,
+    "min_samples": 100,
+    "refresh_minutes": 15,
+    "assume_when_unknown": 1.0
+  },
+
   "performance": {
     "confidence_trades": 20,
     "max_suitability_adjust": 0.5,

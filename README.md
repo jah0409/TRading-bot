@@ -22,6 +22,7 @@ MQL5/
     Regime/      RegimeDetector          ATR + ADX + candles on M15/H1/H4
                  RegimeFeatures          scoring maths, shared with the exporter
     Risk/        RiskManager             sizing and every limit check
+                 CorrelationModel        rolling rho; caps concentrated exposure
     News/        NewsFilter              blackout + caution windows
     Execution/   OrderExecutor           the only code that sends orders
     Portfolio/   VirtualAccount, PerformanceTracker, StrategyAllocator
@@ -37,6 +38,7 @@ tools/                                   offline research (Python)
   backtest.py                            bar-by-bar simulator, results in R
   walkforward.py                         anchored folds, ACCEPT/REJECT verdict
   null_test.py                           random-walk test for look-ahead bias
+  test_correlation.py                    validates the portfolio-risk formula
   make_synthetic.py                      known-regime fixture
 docs/CALIBRATION.md                      how to calibrate the classifier
 docs/WALKFORWARD.md                      out-of-sample validation process
@@ -96,9 +98,11 @@ backtest will do nothing.
 
 - **No threads.** MQL5 has none; strategies run cooperatively round-robin.
   See ARCHITECTURE.md §7.1.
+- The news HTTP API parser is still a stub. The MQL5 native calendar covers
+  live trading and the CSV covers the tester, so this only matters if you want
+  an external feed.
 - **`aggregate_stop_cap_pct` ships at 6%, not the 10% in the brief** — 10%
   of simultaneous stops is an instant account breach. ARCHITECTURE.md §3.
-- Correlation between XAUUSD and US100 is a placeholder, not a model.
 - Strategy parameters are first guesses. Walk-forward them before arming
   (`tools/walkforward.py`), and run `tools/null_test.py` first every time.
 - **`momo_pullback`'s shipped defaults are too tight** - one signal in 40,000
