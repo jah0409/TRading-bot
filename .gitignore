@@ -1,0 +1,11 @@
+# MetaTrader build output
+*.ex5
+*.ex4
+
+# Runtime logs written by the EA
+MQL5/Files/Adaptive/logs/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
