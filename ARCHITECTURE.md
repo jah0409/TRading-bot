@@ -146,26 +146,68 @@ pairs — `trend_ema` live on both XAUUSD and US100 consumes one slot, not two.
 Per symbol, on M15 / H1 / H4:
 
 - **ATR** → volatility, ranked as a *percentile* against its own 100-bar
-  history. A raw ATR number means nothing across two instruments priced as
-  differently as gold and a tech index; a percentile is comparable.
-- **ADX + DI** → trend strength and direction.
+  history, plus an *expansion ratio* (ATR now vs its recent mean). A raw ATR
+  number means nothing shared between gold and a cash index; a percentile and
+  a ratio do.
+- **ADX + DI** → trend strength, and a *normalised* DI spread
+  (`|DI+ − DI−| / (DI+ + DI−)`) for direction, again scale-free.
 - **Candles** → inside/outside bars, NR7 coils, wide-range expansion, pins,
   engulfings, as a bitmask.
+- **Compression** → how coiled the bars *before* this one were.
 
 Six regimes: `TREND_UP`, `TREND_DOWN`, `RANGE`, `BREAKOUT`, `CHOP_HIVOL`,
 `UNKNOWN`. `CHOP_HIVOL` — high volatility with no direction — exists as its
 own class because it is where multi-strategy systems bleed out: every
 strategy sees a signal and they are all wrong.
 
+### The classifier is an argmax, not an if-chain
+
+Each regime gets a continuous score in [0,1]; the highest wins. Every
+threshold is a **soft ramp** (`_lo` → 0, `_hi` → 1) rather than a hard cutoff,
+which is what makes the thing fittable — see `docs/CALIBRATION.md`.
+
+This replaced an ordered `if`-chain that had three defects:
+
+- `BREAKOUT` was tested first, so an established ADX-40 trend printing one
+  wide bar was relabelled a breakout.
+- The breakout branch tested the *current* bar for a coil. A breakout bar is
+  never an inside bar, so that condition could never fire.
+- Each branch computed confidence its own way, so a `RANGE` 0.6 and a `TREND`
+  0.6 meant different things — yet the allocator multiplied suitability by
+  them and the composite vote weighted by them.
+
+**Confidence** is now one quantity everywhere: the margin between the winning
+score and the runner-up, blended with the winner's level. Two regimes at 0.9
+and 0.85 is genuine ambiguity, and now reads as low confidence.
+
+The scoring maths lives in `Regime/RegimeFeatures.mqh` as pure functions,
+shared verbatim by the live detector and the offline exporter. Train/serve
+parity is not optional here: thresholds fitted against features computed
+differently from the live ones would be worthless.
+
+### Per symbol, always
+
+Thresholds live under `regime.per_symbol.<SYMBOL>` and fall back to the
+defaults. Gold and US100 do not share an ADX threshold, and the shipped
+defaults are calibrated on neither.
+
 The three timeframes are blended by configurable weights (default
 M15 0.25 / H1 0.40 / H4 0.35) into a composite plus a confidence. Below
 `min_composite_confidence` the composite collapses to `UNKNOWN` and
-**nobody trades** — no trading on a guess.
+**nobody trades** — no trading on a guess. Hysteresis
+(`min_bars_in_regime`) requires a new regime to persist before it is adopted,
+which stops the active-strategy set churning every bar.
 
-Hysteresis (`min_bars_in_regime`) requires a new regime to persist before it
-is adopted, which stops the active-strategy set churning every bar.
+### Known weakness
 
----
+On the synthetic fixture (`tools/make_synthetic.py`, which plants known
+regimes) the classifier recovers ~92% of trend-up and ~81% of trend-down bars,
+but **chop detection is weak**: roughly half of planted `CHOP_HIVOL` is
+correctly avoided — mostly by abstaining to `UNKNOWN` rather than by naming it
+— and about a third is mislabelled as trend. That residual is the main thing
+to watch during observe mode. `BREAKOUT` is likewise not cleanly separable
+from `TREND` using forward price action alone; what distinguishes it is the
+compression that preceded it.
 
 ## 5. Strategy selection
 
@@ -275,15 +317,17 @@ uncalibrated model, is how you end up with one strategy left and no idea why.
 | Risk arithmetic, sizing, all gates | implemented |
 | Daily lock / kill switch, restart-persistent | implemented |
 | Risk ramp phases | implemented |
-| Regime detection plumbing + candle maths | implemented |
-| Regime classifier **thresholds** | written, **uncalibrated** |
+| Regime detection plumbing, candle + compression maths | implemented |
+| Regime classifier structure (soft-ramp argmax) | implemented |
+| Regime **threshold values** | shipped defaults, **fit them with `tools/calibrate_regime.py`** |
+| Calibration pipeline (exporter + fitter + fixture) | implemented, self-tested |
 | News windows, tiering, fail-closed | implemented |
 | Order execution, retries, trailing | implemented |
 | Virtual accounts, expectancy matrix, allocation | implemented |
 | Strategy entry rules | written, **uncalibrated** (`=== TUNE ME ===`) |
 | News HTTP API parser | **stub** |
 | Correlation model (XAUUSD↔US100) | **stub** — placeholder counts same-direction risk |
-| Walk-forward harness | **not started** — offline tool |
+| Walk-forward harness for *strategies* | **not started** — offline tool |
 
 ---
 
@@ -293,8 +337,9 @@ uncalibrated model, is how you end up with one strategy left and no idea why.
    default — the EA classifies, scores and logs without sending an order.
    Leave it a week and read `regime_*.csv`. If the regime labels don't match
    what you see on the chart, nothing downstream matters.
-2. **Calibrate the regime thresholds** per symbol. Gold and US100 will not
-   share an ADX threshold.
+2. **Calibrate the regime thresholds** per symbol — run `RegimeExport.mq5`,
+   then `tools/calibrate_regime.py`. See `docs/CALIBRATION.md`. Gold and
+   US100 will not share an ADX threshold.
 3. **Walk-forward one strategy** end to end, prove the harness.
 4. **Arm with one strategy**, phase 1, one symbol.
 5. Add strategies only as each earns its place out of sample.

@@ -9,3 +9,7 @@ MQL5/Files/Adaptive/logs/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Python
+__pycache__/
+*.py[co]

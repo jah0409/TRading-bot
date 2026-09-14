@@ -20,14 +20,21 @@ MQL5/
     Core/        Types, Json, Config, Logger
     Engine/      Orchestrator            main loop, scheduler, attribution
     Regime/      RegimeDetector          ATR + ADX + candles on M15/H1/H4
+                 RegimeFeatures          scoring maths, shared with the exporter
     Risk/        RiskManager             sizing and every limit check
     News/        NewsFilter              blackout + caution windows
     Execution/   OrderExecutor           the only code that sends orders
     Portfolio/   VirtualAccount, PerformanceTracker, StrategyAllocator
     Strategies/  StrategyBase + 5 strategies + StrategyFactory
+  Scripts/Adaptive/RegimeExport.mq5      dump features for calibration
   Files/Adaptive/
     config.json                          all tuning lives here
     calendar.csv                         fallback calendar (required for backtests)
+tools/                                   offline calibration (Python)
+  regime_lib.py                          mirror of RegimeFeatures.mqh
+  calibrate_regime.py                    fit thresholds, emit config
+  make_synthetic.py                      known-regime fixture for the self-test
+docs/CALIBRATION.md                      how to calibrate the classifier
 docs/WALKFORWARD.md                      out-of-sample validation process
 ```
 
@@ -88,4 +95,9 @@ backtest will do nothing.
 - **`aggregate_stop_cap_pct` ships at 6%, not the 10% in the brief** — 10%
   of simultaneous stops is an instant account breach. ARCHITECTURE.md §3.
 - Correlation between XAUUSD and US100 is a placeholder, not a model.
-- Strategy and regime parameters are first guesses. Calibrate before arming.
+- Strategy parameters are first guesses. Walk-forward them before arming.
+- Regime thresholds ship as defaults calibrated on neither symbol. Fit them
+  per symbol with `tools/calibrate_regime.py` — see docs/CALIBRATION.md.
+- **Chop detection is the classifier's weak point.** On the synthetic fixture
+  it recovers ~92% of trending bars but names only part of the chop, avoiding
+  much of the rest by abstaining. Watch this in observe mode.

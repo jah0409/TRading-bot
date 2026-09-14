@@ -42,16 +42,45 @@
   },
 
   "regime": {
+    "_comment": "Thresholds are SOFT RAMPS: score is 0 at _lo, 1 at _hi. Fit them per symbol with tools/calibrate_regime.py and paste the result into per_symbol below. See docs/CALIBRATION.md.",
     "atr_period": 14,
     "adx_period": 14,
     "atr_percentile_lookback": 100,
+
+    "adx_trend_lo": 20.0,
+    "adx_trend_hi": 35.0,
+    "adx_range_lo": 15.0,
+    "adx_range_hi": 28.0,
+    "di_spread_lo": 0.10,
+    "di_spread_hi": 0.40,
+    "atr_vol_lo": 0.55,
+    "atr_vol_hi": 0.85,
+    "atr_expansion_lo": 1.15,
+    "atr_expansion_hi": 1.80,
+    "compression_lookback": 10,
+    "compression_min": 0.20,
+    "min_score_to_classify": 0.20,
+
+    "_legacy_comment": "Kept so an un-calibrated config still works: the ramps above default to a band around these if omitted.",
     "adx_trend_threshold": 25.0,
     "adx_range_threshold": 20.0,
     "atr_high_percentile": 0.75,
     "atr_low_percentile": 0.25,
+
     "tf_weight": { "M15": 0.25, "H1": 0.40, "H4": 0.35 },
     "min_composite_confidence": 0.45,
-    "min_bars_in_regime": 2
+    "min_bars_in_regime": 2,
+
+    "per_symbol": {
+      "_comment": "Calibrated overrides go here, one block per symbol. Gold and a cash index do not share an ADX threshold. Empty = every symbol uses the defaults above.",
+      "_example_XAUUSD": {
+        "adx_trend_lo": 22.0,
+        "adx_trend_hi": 31.0,
+        "atr_vol_lo": 0.50,
+        "atr_vol_hi": 0.80,
+        "min_score_to_classify": 0.20
+      }
+    }
   },
 
   "news": {

@@ -20,6 +20,7 @@
 #include "../Core/Types.mqh"
 #include "../Core/Config.mqh"
 #include "../Core/Logger.mqh"
+#include "RegimeFeatures.mqh"
 
 //--- indicator handles + state for one (symbol, timeframe) pair -----
 struct SRegimeSlot
@@ -32,6 +33,7 @@ struct SRegimeSlot
    ENUM_REGIME       pending;      // candidate waiting to be confirmed
    int               pending_bars;
    datetime          last_bar;
+   SRegimeConfig     rc;           // per-symbol, resolved once at Init
   };
 
 class CRegimeDetector
@@ -87,135 +89,37 @@ private:
      }
 
    //+---------------------------------------------------------------+
-   //| Candle pattern flags on the last closed bar.                   |
+   //| ATR expansion: current ATR against its own recent mean. Scale-  |
+   //| free, so the same ramp bounds work on gold and on an index.     |
    //+---------------------------------------------------------------+
-   int               CandleFlags(const string symbol, const ENUM_TIMEFRAMES tf) const
+   double            AtrExpansion(const int handle, const int lookback, const double current) const
      {
-      MqlRates r[];
-      ArraySetAsSeries(r, true);
-      if(CopyRates(symbol, tf, 0, 10, r) < 9)
-         return CANDLE_NONE;
+      double buf[];
+      ArraySetAsSeries(buf, true);
+      int want = lookback + 2;
+      if(CopyBuffer(handle, 0, 0, want, buf) < want)
+         return 1.0;
 
-      //--- r[0] is forming; r[1] is the last closed bar
-      int flags = CANDLE_NONE;
-      double hi = r[1].high, lo = r[1].low, op = r[1].open, cl = r[1].close;
-      double rng = hi - lo;
-      if(rng <= 0.0)
-         return CANDLE_NONE;
-
-      double body = MathAbs(cl - op);
-      double upper_wick = hi - MathMax(op, cl);
-      double lower_wick = MathMin(op, cl) - lo;
-
-      //--- inside / outside relative to the prior bar
-      if(hi <= r[2].high && lo >= r[2].low)
-         flags |= CANDLE_INSIDE_BAR;
-      if(hi > r[2].high && lo < r[2].low)
-         flags |= CANDLE_OUTSIDE_BAR;
-
-      //--- NR7: narrowest range of the last seven closed bars -> coil
-      bool nr7 = true;
-      for(int i = 2; i <= 7; i++)
-         if((r[i].high - r[i].low) <= rng)
-           {
-            nr7 = false;
-            break;
-           }
-      if(nr7)
-         flags |= CANDLE_NR7;
-
-      //--- wide range: more than 1.5x the mean of the prior six
-      double mean = 0.0;
-      for(int i = 2; i <= 7; i++)
-         mean += (r[i].high - r[i].low);
-      mean /= 6.0;
-      if(mean > 0.0 && rng > 1.5 * mean)
-         flags |= CANDLE_WIDE_RANGE;
-
-      //--- doji / pins
-      if(body <= 0.1 * rng)
-         flags |= CANDLE_DOJI;
-      if(lower_wick >= 2.0 * body && lower_wick > upper_wick)
-         flags |= CANDLE_PIN_BULL;
-      if(upper_wick >= 2.0 * body && upper_wick > lower_wick)
-         flags |= CANDLE_PIN_BEAR;
-
-      //--- engulfing
-      double pbody_hi = MathMax(r[2].open, r[2].close);
-      double pbody_lo = MathMin(r[2].open, r[2].close);
-      if(cl > op && cl >= pbody_hi && op <= pbody_lo)
-         flags |= CANDLE_ENGULF_BULL;
-      if(cl < op && op >= pbody_hi && cl <= pbody_lo)
-         flags |= CANDLE_ENGULF_BEAR;
-
-      return flags;
-     }
-
-   //+---------------------------------------------------------------+
-   //| The classifier. ATR percentile + ADX + candle flags -> regime. |
-   //|                                                                |
-   //| === TUNE ME === thresholds are first-guess defaults. The whole |
-   //| point of the walk-forward harness is to calibrate these per    |
-   //| symbol; XAUUSD and US100 almost certainly want different ones. |
-   //+---------------------------------------------------------------+
-   ENUM_REGIME       Classify(const SRegimeTF &m, double &confidence) const
-     {
-      SRegimeConfig rc = m_cfg.Regime();
-      confidence = 0.0;
-
-      bool trending    = (m.adx >= rc.adx_trend_threshold);
-      bool ranging     = (m.adx <= rc.adx_range_threshold);
-      bool vol_high    = (m.atr_percentile >= rc.atr_high_percentile);
-      bool vol_low     = (m.atr_percentile <= rc.atr_low_percentile);
-      bool coiled      = ((m.candle_flags & (CANDLE_NR7 | CANDLE_INSIDE_BAR)) != 0);
-      bool expanding   = ((m.candle_flags & (CANDLE_WIDE_RANGE | CANDLE_OUTSIDE_BAR)) != 0);
-      double di_spread = MathAbs(m.di_plus - m.di_minus);
-
-      //--- breakout: volatility expanding out of a coil -------------
-      if(expanding && vol_high && !ranging)
+      double sum = 0.0;
+      int    n = 0;
+      for(int i = 2; i < want; i++)     // skip [0] forming and [1] current
         {
-         //--- confidence scales with how far past the threshold we are
-         confidence = MathMin(1.0, 0.5 + (m.atr_percentile - rc.atr_high_percentile) * 2.0);
-         return REGIME_BREAKOUT;
+         if(buf[i] <= 0.0)
+            continue;
+         sum += buf[i];
+         n++;
         }
-
-      //--- directional trend ----------------------------------------
-      if(trending && di_spread >= 5.0)
-        {
-         double adx_conf = MathMin(1.0, (m.adx - rc.adx_trend_threshold) / 25.0 + 0.5);
-         double di_conf  = MathMin(1.0, di_spread / 30.0);
-         confidence = MathMin(1.0, 0.5 * adx_conf + 0.5 * di_conf);
-         return (m.di_plus > m.di_minus ? REGIME_TREND_UP : REGIME_TREND_DOWN);
-        }
-
-      //--- high volatility with no direction: the account killer ----
-      if(vol_high && ranging)
-        {
-         confidence = MathMin(1.0, 0.5 + (m.atr_percentile - rc.atr_high_percentile) * 2.0);
-         return REGIME_CHOP_HIVOL;
-        }
-
-      //--- quiet range ----------------------------------------------
-      if(ranging && (vol_low || coiled))
-        {
-         double adx_conf = MathMin(1.0, (rc.adx_range_threshold - m.adx) / 15.0 + 0.5);
-         confidence = MathMax(0.3, MathMin(1.0, adx_conf));
-         return REGIME_RANGE;
-        }
-
-      confidence = 0.25;
-      return REGIME_UNKNOWN;
+      if(n == 0 || sum <= 0.0)
+         return 1.0;
+      double mean = sum / (double)n;
+      return (mean > 0.0 ? current / mean : 1.0);
      }
 
    //+---------------------------------------------------------------+
    //| Weighted vote across M15/H1/H4 -> one composite regime.        |
    //+---------------------------------------------------------------+
-   void              Composite(SRegimeSnapshot &snap) const
+   void              Composite(SRegimeSnapshot &snap, const SRegimeConfig &rc) const
      {
-      //--- copy the config struct out before touching its array member:
-      //--- indexing an array on a returned temporary is not portable
-      SRegimeConfig rc = m_cfg.Regime();
-
       double score[6];
       ArrayInitialize(score, 0.0);
 
@@ -270,6 +174,7 @@ public:
       for(int s = 0; s < nsym; s++)
         {
          string sym = m_cfg.SymbolAt(s);
+         SRegimeConfig rc = m_cfg.RegimeFor(sym);
          m_snapshots[s].symbol       = sym;
          m_snapshots[s].composite    = REGIME_UNKNOWN;
          m_snapshots[s].evaluated_at = 0;
@@ -285,9 +190,10 @@ public:
             m_slots[k].pending      = REGIME_UNKNOWN;
             m_slots[k].pending_bars = 0;
             m_slots[k].last_bar     = 0;
+            m_slots[k].rc           = rc;
 
-            m_slots[k].h_atr = iATR(sym, tf, m_cfg.Regime().atr_period);
-            m_slots[k].h_adx = iADX(sym, tf, m_cfg.Regime().adx_period);
+            m_slots[k].h_atr = iATR(sym, tf, rc.atr_period);
+            m_slots[k].h_adx = iADX(sym, tf, rc.adx_period);
 
             if(m_slots[k].h_atr == INVALID_HANDLE || m_slots[k].h_adx == INVALID_HANDLE)
               {
@@ -327,6 +233,13 @@ public:
       if(si < 0)
          return false;
 
+      //--- one resolved config for this symbol, used by every timeframe
+      //--- and by the composite vote below
+      int h1 = FindSlot(symbol, TF_SLOT_H1);
+      if(h1 < 0)
+         return false;
+      SRegimeConfig sym_rc = m_slots[h1].rc;
+
       SRegimeSnapshot snap;
       snap.symbol       = symbol;
       snap.evaluated_at = TimeCurrent();
@@ -359,19 +272,40 @@ public:
            }
 
          double price = SymbolInfoDouble(symbol, SYMBOL_BID);
+         SRegimeConfig rc = m_slots[idx].rc;
+
+         //--- the bars the candle and compression features need.
+         //--- r[0] is forming, so classify r[1]: offset 1 throughout.
+         MqlRates rates[];
+         ArraySetAsSeries(rates, true);
+         int need = rc.compression_lookback + 10;
+         if(CopyRates(symbol, tf, 0, need, rates) < need)
+           {
+            snap.tf[t].regime     = REGIME_UNKNOWN;
+            snap.tf[t].confidence = 0.0;
+            continue;
+           }
 
          SRegimeTF m;
          m.atr            = atr_buf[1];
          m.atr_pct        = (price > 0.0 ? m.atr / price : 0.0);
-         m.atr_percentile = AtrPercentile(m_slots[idx].h_atr,
-                                          m_cfg.Regime().atr_percentile_lookback, m.atr);
+         m.atr_percentile = AtrPercentile(m_slots[idx].h_atr, rc.atr_percentile_lookback, m.atr);
+         m.atr_expansion  = AtrExpansion(m_slots[idx].h_atr, rc.atr_percentile_lookback, m.atr);
          m.adx            = adx_buf[1];
          m.di_plus        = dip_buf[1];
          m.di_minus       = dim_buf[1];
-         m.candle_flags   = CandleFlags(symbol, tf);
 
+         double di_sum    = m.di_plus + m.di_minus;
+         m.di_spread_norm = (di_sum > 0.0 ? MathAbs(m.di_plus - m.di_minus) / di_sum : 0.0);
+
+         m.candle_flags   = ComputeCandleFlags(rates, 1);
+         m.compression    = ComputeCompression(rates, 1, rc.compression_lookback);
+
+         //--- identical call to the one the offline exporter makes
+         SRegimeScores scores;
+         ComputeRegimeScores(m, rc, scores);
          double conf = 0.0;
-         ENUM_REGIME raw = Classify(m, conf);
+         ENUM_REGIME raw = ClassifyFromScores(scores, rc, conf);
          m.confidence = conf;
 
          //--- hysteresis: a new regime must persist before we act on it
@@ -400,7 +334,7 @@ public:
                m_slots[idx].pending_bars = 0;
               }
 
-            if(m_slots[idx].pending_bars >= m_cfg.Regime().min_bars_in_regime)
+            if(m_slots[idx].pending_bars >= rc.min_bars_in_regime)
               {
                m_slots[idx].current      = raw;
                m_slots[idx].pending_bars = 0;
@@ -415,7 +349,7 @@ public:
             m_log.Regime(symbol, slot, m, prev, snap);
         }
 
-      Composite(snap);
+      Composite(snap, sym_rc);
       m_snapshots[si] = snap;
       out = snap;
       return true;

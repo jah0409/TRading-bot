@@ -58,13 +58,30 @@ struct SRegimeConfig
    int               atr_period;
    int               adx_period;
    int               atr_percentile_lookback;
+   //--- legacy hard thresholds. Still read, and still used to derive
+   //--- the soft ramps below when those are not given explicitly.
    double            adx_trend_threshold;     // >= => trending
    double            adx_range_threshold;     // <= => ranging
    double            atr_high_percentile;     // >= => high volatility
    double            atr_low_percentile;      // <= => compression
+   //--- soft ramp bounds: score goes 0 at _lo, 1 at _hi. These are what
+   //--- tools/calibrate_regime.py fits, per symbol.
+   double            adx_trend_lo;
+   double            adx_trend_hi;
+   double            adx_range_lo;            // range score ramps DOWN over this
+   double            adx_range_hi;
+   double            di_spread_lo;
+   double            di_spread_hi;
+   double            atr_vol_lo;              // percentile ramp for "high vol"
+   double            atr_vol_hi;
+   double            atr_expansion_lo;
+   double            atr_expansion_hi;
+   int               compression_lookback;    // bars of coil to look back over
+   double            compression_min;         // breakout needs at least this
    double            tf_weight[TF_SLOT_COUNT];// M15/H1/H4 blend weights
    double            min_composite_confidence;
    int               min_bars_in_regime;      // hysteresis: bars before switching
+   double            min_score_to_classify;   // below this the bar is UNKNOWN
   };
 
 //--- News filter -----------------------------------------------------
@@ -151,6 +168,50 @@ public:
    SAccountConfig Account(void) const { return m_account; }
    SRiskConfig    Risk(void)    const { return m_risk; }
    SRegimeConfig  Regime(void)  const { return m_regime; }
+
+   //+---------------------------------------------------------------+
+   //| Regime settings for ONE symbol: defaults with any
+   //| regime.per_symbol.<SYMBOL>.* overrides applied on top.
+   //|
+   //| Gold and a cash index do not share an ADX threshold. Anything
+   //| calibration fits is per symbol, so this is the accessor the
+   //| detector actually uses.
+   //+---------------------------------------------------------------+
+   SRegimeConfig  RegimeFor(const string symbol)
+     {
+      SRegimeConfig rc = m_regime;
+      string base = "regime.per_symbol." + symbol;
+      if(!m_json.Exists(base))
+         return rc;
+
+      rc.atr_period               = m_json.GetInt(base + ".atr_period", rc.atr_period);
+      rc.adx_period               = m_json.GetInt(base + ".adx_period", rc.adx_period);
+      rc.atr_percentile_lookback  = m_json.GetInt(base + ".atr_percentile_lookback",
+                                                  rc.atr_percentile_lookback);
+      rc.adx_trend_lo             = m_json.GetDouble(base + ".adx_trend_lo", rc.adx_trend_lo);
+      rc.adx_trend_hi             = m_json.GetDouble(base + ".adx_trend_hi", rc.adx_trend_hi);
+      rc.adx_range_lo             = m_json.GetDouble(base + ".adx_range_lo", rc.adx_range_lo);
+      rc.adx_range_hi             = m_json.GetDouble(base + ".adx_range_hi", rc.adx_range_hi);
+      rc.di_spread_lo             = m_json.GetDouble(base + ".di_spread_lo", rc.di_spread_lo);
+      rc.di_spread_hi             = m_json.GetDouble(base + ".di_spread_hi", rc.di_spread_hi);
+      rc.atr_vol_lo               = m_json.GetDouble(base + ".atr_vol_lo", rc.atr_vol_lo);
+      rc.atr_vol_hi               = m_json.GetDouble(base + ".atr_vol_hi", rc.atr_vol_hi);
+      rc.atr_expansion_lo         = m_json.GetDouble(base + ".atr_expansion_lo", rc.atr_expansion_lo);
+      rc.atr_expansion_hi         = m_json.GetDouble(base + ".atr_expansion_hi", rc.atr_expansion_hi);
+      rc.compression_lookback     = m_json.GetInt(base + ".compression_lookback",
+                                                  rc.compression_lookback);
+      rc.compression_min          = m_json.GetDouble(base + ".compression_min", rc.compression_min);
+      rc.min_score_to_classify    = m_json.GetDouble(base + ".min_score_to_classify",
+                                                     rc.min_score_to_classify);
+      rc.min_composite_confidence = m_json.GetDouble(base + ".min_composite_confidence",
+                                                     rc.min_composite_confidence);
+      rc.min_bars_in_regime       = m_json.GetInt(base + ".min_bars_in_regime",
+                                                  rc.min_bars_in_regime);
+      rc.tf_weight[TF_SLOT_M15]   = m_json.GetDouble(base + ".tf_weight.M15", rc.tf_weight[TF_SLOT_M15]);
+      rc.tf_weight[TF_SLOT_H1]    = m_json.GetDouble(base + ".tf_weight.H1", rc.tf_weight[TF_SLOT_H1]);
+      rc.tf_weight[TF_SLOT_H4]    = m_json.GetDouble(base + ".tf_weight.H4", rc.tf_weight[TF_SLOT_H4]);
+      return rc;
+     }
    SNewsConfig    News(void)    const { return m_news; }
    SExecConfig    Exec(void)    const { return m_exec; }
 
@@ -225,6 +286,29 @@ public:
       m_regime.adx_range_threshold      = m_json.GetDouble("regime.adx_range_threshold", 20.0);
       m_regime.atr_high_percentile      = m_json.GetDouble("regime.atr_high_percentile", 0.75);
       m_regime.atr_low_percentile       = m_json.GetDouble("regime.atr_low_percentile", 0.25);
+      //--- soft ramps default to a band around the legacy thresholds, so
+      //--- an un-calibrated config keeps working and calibration simply
+      //--- writes explicit _lo/_hi values over the top
+      m_regime.adx_trend_lo             = m_json.GetDouble("regime.adx_trend_lo",
+                                                           m_regime.adx_trend_threshold - 5.0);
+      m_regime.adx_trend_hi             = m_json.GetDouble("regime.adx_trend_hi",
+                                                           m_regime.adx_trend_threshold + 10.0);
+      m_regime.adx_range_lo             = m_json.GetDouble("regime.adx_range_lo",
+                                                           m_regime.adx_range_threshold - 5.0);
+      m_regime.adx_range_hi             = m_json.GetDouble("regime.adx_range_hi",
+                                                           m_regime.adx_range_threshold + 8.0);
+      m_regime.di_spread_lo             = m_json.GetDouble("regime.di_spread_lo", 0.10);
+      m_regime.di_spread_hi             = m_json.GetDouble("regime.di_spread_hi", 0.40);
+      m_regime.atr_vol_lo               = m_json.GetDouble("regime.atr_vol_lo",
+                                                           m_regime.atr_high_percentile - 0.20);
+      m_regime.atr_vol_hi               = m_json.GetDouble("regime.atr_vol_hi",
+                                                           m_regime.atr_high_percentile + 0.10);
+      m_regime.atr_expansion_lo         = m_json.GetDouble("regime.atr_expansion_lo", 1.15);
+      m_regime.atr_expansion_hi         = m_json.GetDouble("regime.atr_expansion_hi", 1.80);
+      m_regime.compression_lookback     = m_json.GetInt("regime.compression_lookback", 10);
+      m_regime.compression_min          = m_json.GetDouble("regime.compression_min", 0.20);
+      m_regime.min_score_to_classify    = m_json.GetDouble("regime.min_score_to_classify", 0.20);
+
       m_regime.tf_weight[TF_SLOT_M15]   = m_json.GetDouble("regime.tf_weight.M15", 0.25);
       m_regime.tf_weight[TF_SLOT_H1]    = m_json.GetDouble("regime.tf_weight.H1", 0.40);
       m_regime.tf_weight[TF_SLOT_H4]    = m_json.GetDouble("regime.tf_weight.H4", 0.35);

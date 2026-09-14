@@ -81,7 +81,26 @@ struct SRegimeTF
    double            di_plus;
    double            di_minus;
    int               candle_flags;    // bitmask of CANDLE_*
-   double            confidence;      // 0..1, how clean the classification is
+   double            confidence;      // 0..1, margin between the top two scores
+   //--- calibration features. All three are scale-free on purpose: an
+   //--- absolute ATR or DI value means nothing shared between gold and
+   //--- a cash index, but a ratio or a percentile does.
+   double            di_spread_norm;  // |DI+ - DI-| / (DI+ + DI-), 0..1
+   double            atr_expansion;   // ATR now / mean ATR over the lookback
+   double            compression;     // 0..1, how coiled the PRIOR bars were
+  };
+
+//--- continuous per-regime scores. The classifier is an argmax over
+//--- these rather than a chain of ifs, so every threshold becomes a
+//--- soft ramp that calibration can move, and the confidences of two
+//--- different regimes are directly comparable.
+struct SRegimeScores
+  {
+   double            trend_up;
+   double            trend_down;
+   double            range;
+   double            breakout;
+   double            chop;
   };
 
 //--- Full multi-timeframe snapshot for one symbol -------------------
