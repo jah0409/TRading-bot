@@ -84,7 +84,11 @@ class Result:
 
 
 def run(df, sig: dict, regime, session=None, cost=None,
-        spread_arr=None, max_hold=None) -> Result:
+        spread_arr=None, max_hold=None, min_exit_profit=0.0) -> Result:
+    """min_exit_profit: once trailing starts, never let the trailed stop sit
+    closer than this many PRICE UNITS to the entry. Without it a trailed exit
+    can bank less than the strategy's declared minimum target, which is how a
+    '10 pip minimum' quietly produces 3 pip winners."""
     o = df["open"].to_numpy(float)
     h = df["high"].to_numpy(float)
     l = df["low"].to_numpy(float)
@@ -190,9 +194,33 @@ def run(df, sig: dict, regime, session=None, cost=None,
                 gate = tg[k]
                 if np.isfinite(cand) and np.isfinite(gate):
                     moved = (o[j] - fill) * direction
-                    if moved >= gate and ((direction > 0 and cand > cur_stop) or
-                                          (direction < 0 and cand < cur_stop)):
-                        cur_stop = cand
+                    if moved >= gate:
+                        # Protect the declared minimum WITHOUT ever placing the
+                        # stop above the market.
+                        #
+                        # The obvious version of this clamp - raise the stop to
+                        # fill + min_profit - is wrong, and badly so: on a
+                        # timeframe where min_profit is several R, the clamped
+                        # stop lands ABOVE current price and the next bar books
+                        # an exit the market never reached. It produced +0.595R
+                        # and PF 2.46 on M15, against a 0.171R cost floor,
+                        # which is what gave it away.
+                        #
+                        # Correct behaviour: do not trail at all until the trade
+                        # is already past the minimum, and only then refuse to
+                        # trail back below it.
+                        ok_to_trail = True
+                        if min_exit_profit > 0.0:
+                            need = min_exit_profit + slip_stop
+                            if moved < need:
+                                ok_to_trail = False        # not yet protected
+                            else:
+                                floor_px = fill + direction * need
+                                cand = (max(cand, floor_px) if direction > 0
+                                        else min(cand, floor_px))
+                        if ok_to_trail and ((direction > 0 and cand > cur_stop) or
+                                            (direction < 0 and cand < cur_stop)):
+                            cur_stop = cand
             j += 1
 
         if not exited:

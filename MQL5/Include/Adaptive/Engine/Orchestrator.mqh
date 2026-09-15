@@ -329,6 +329,7 @@ public:
          bl.max_dd_r      = m_cfg.Json().GetDouble(bp + ".max_dd_r", 0.0);
          bl.sample_trades = m_cfg.Json().GetInt(bp + ".sample_trades", 0);
          bl.evidence_tier = m_cfg.Json().GetString(bp + ".evidence", "INSUFFICIENT");
+         bl.borderline    = m_cfg.Json().GetBool(bp + ".borderline", false);
          bl.valid         = m_cfg.Json().Exists(bp) && bl.expectancy_r > 0.0;
          s.Health().Init(sc.id, GetPointer(m_cfg), GetPointer(m_log), bl);
 

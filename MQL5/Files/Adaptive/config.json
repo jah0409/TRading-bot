@@ -42,7 +42,10 @@
       "advance_max_drawdown_pct": 3.0,
       "_comment": "Time is a CEILING on the phase, never a reason to reach it. Promotion also needs profit, a live sample, acceptable drawdown and zero risk violations."
     },
-    "min_reward_risk": 0.8
+    "min_reward_risk": 0.8,
+    "min_target_pips": 10.0,
+    "pip_size": 1.0,
+    "_pip_comment": "XAUUSD is quoted to 2 decimals, so 1 point = 0.01. We use the CONSERVATIVE pip convention: 1 pip = 1.00 USD (100 points). min_target_pips 10 therefore means a winning trade must be able to make at least 10.00 USD. Set pip_size 0.10 if your broker's convention differs."
   },
   "regime": {
     "_comment": "Thresholds are SOFT RAMPS: score is 0 at _lo, 1 at _hi. Fit them per symbol with tools/calibrate_regime.py and paste the result into per_symbol below. See docs/CALIBRATION.md.",
@@ -176,7 +179,7 @@
         "trail_atr_mult": 2.5,
         "min_rr": 1.5
       },
-      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
+      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
     },
     {
       "id": "mean_rev_bb",
@@ -209,7 +212,7 @@
         "rsi_overbought": 70.0,
         "stop_atr_mult": 1.0
       },
-      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
+      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
     },
     {
       "id": "breakout_dc",
@@ -237,7 +240,7 @@
         "trail_atr_mult": 2.0,
         "min_atr_percentile": 0.6
       },
-      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
+      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
     },
     {
       "id": "momo_pullback",
@@ -273,7 +276,7 @@
         "stop_atr_mult": 1.5,
         "trail_atr_mult": 2.0
       },
-      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
+      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
     },
     {
       "id": "range_fade",
@@ -306,51 +309,14 @@
         "target_atr_mult": 1.0,
         "max_hold_bars": 8
       },
-      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
-    },
-    {
-      "id": "trend_continuation_h1",
-      "type": "trend_follow_ema",
-      "version": "2.0.0",
-      "enabled": true,
-      "_validated": "walk-forward H1, 396 out-of-sample trades",
-      "symbols": [
-        "XAUUSD"
-      ],
-      "capital_weight": 1.0,
-      "min_suitability_to_run": 0.55,
-      "incompatible_with": [],
-      "timeframe": "H1",
-      "baseline": {
-        "expectancy_r": 0.038,
-        "profit_factor": 1.125,
-        "win_rate": 0.4823,
-        "max_dd_r": 13.93,
-        "sample_trades": 396,
-        "evidence": "STRONGER",
-        "verdict": "pooled +0.038R over 396 trades, positive in 3/4 folds, degradation +50%, 0.2 unstable params/fold"
-      },
-      "suitability": {
-        "UNKNOWN": 0.0,
-        "TREND_UP": 0.85,
-        "TREND_DOWN": 0.85,
-        "RANGE": 0.1,
-        "BREAKOUT": 0.55,
-        "CHOP_HIVOL": 0.05
-      },
-      "params": {
-        "stop_atr": 2.5,
-        "trail_atr": 1.5,
-        "rr": 2.0,
-        "min_adx": 22.0
-      }
+      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
     },
     {
       "id": "bos_choch_h4",
       "type": "breakout_donchian",
       "version": "2.0.0",
       "enabled": true,
-      "_validated": "walk-forward H4, 297 out-of-sample trades",
+      "_status": "BORDERLINE - enabled on PROBATION at half risk. Positive pooled expectancy and zero unstable parameters, but test expectancy was positive in only 2 of 4 folds. Not a validated edge.",
       "symbols": [
         "XAUUSD"
       ],
@@ -359,27 +325,28 @@
       "incompatible_with": [],
       "timeframe": "H4",
       "baseline": {
-        "expectancy_r": 0.0308,
-        "profit_factor": 1.083,
-        "win_rate": 0.4747,
-        "max_dd_r": 16.51,
-        "sample_trades": 297,
+        "expectancy_r": 0.0807,
+        "profit_factor": 1.22,
+        "win_rate": 0.6406,
+        "max_dd_r": 12.07,
+        "sample_trades": 281,
         "evidence": "STRONGER",
-        "verdict": "pooled +0.031R over 297 trades, positive in 3/4 folds, degradation +48%, 0.5 unstable params/fold"
+        "borderline": true,
+        "verdict": "test expectancy positive in only 2/4 folds"
       },
       "suitability": {
         "UNKNOWN": 0.0,
-        "TREND_UP": 0.6,
-        "TREND_DOWN": 0.6,
-        "RANGE": 0.1,
-        "BREAKOUT": 0.55,
-        "CHOP_HIVOL": 0.05
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.8,
+        "CHOP_HIVOL": 0.2
       },
       "params": {
-        "window": 18,
+        "window": 6,
         "stop_atr": 1.0,
         "trail_atr": 2.0,
-        "rr": 2.0
+        "rr": 1.5
       }
     }
   ],

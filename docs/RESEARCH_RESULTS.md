@@ -137,3 +137,104 @@ python3 tools/data_engine.py --m1 XAU_1m_data.jsonl --out cache
 python3 tools/research.py --cache cache --tf H1 --from 2012-01-01 --out h1.json
 python3 tools/research.py --cache cache --tf H4 --from 2008-01-01 --out h4.json
 ```
+
+
+---
+
+# Addendum: the ≥10 pip minimum target
+
+Added at your request: *"strategy must target at least 8–10 pips per winning
+trade."*
+
+## What a "pip" means on gold
+
+Gold is quoted to 2 decimals, so 1 point = 0.01 USD. Two conventions are in
+common use and they differ by 10×:
+
+| Convention | 10 pips |
+|---|---|
+| 1 pip = 0.10 USD | 1.00 USD |
+| 1 pip = 1.00 USD | **10.00 USD** |
+
+**The conservative one is implemented**: `pip_size = 1.00`, so
+`min_target_pips = 10` means a winning trade must be able to make a real
+**$10.00** move. Set `risk.pip_size` to 0.10 in `config.json` if your broker's
+convention differs.
+
+For scale, at $1.00/pip a 10-pip target is 1.26× H4 ATR and 26× the round-trip
+cost. At $0.10/pip it would be 0.13 ATR — scalping, and not viable at these
+costs.
+
+## How it is enforced — in three places
+
+1. **Strategy layer** (`strategies_v2.py`): signals that cannot reach the
+   minimum are **dropped, not stretched**. Pushing a target out to a level the
+   market was never going to reach just converts winners into losers.
+2. **Trail clamp** (`backtest_v2.py`): once trailing starts, the stop may not
+   sit closer to entry than the minimum — otherwise a "10 pip minimum" quietly
+   produces 3 pip trailed winners.
+3. **Live gate** (`TradeGate.mqh`, check 15 of 16): every order is re-checked
+   against `risk.min_target_pips` before it reaches the risk manager.
+
+Where a strategy trails instead of setting a target, the **stop** distance must
+clear the minimum: 1R is the natural unit of a winner, and a trade whose entire
+1R is below the minimum cannot produce a qualifying winner however far it runs.
+
+## A bug this constraint exposed
+
+The first version of the trail clamp raised the stop to `entry + min_target`.
+On M15, where ATR is ~1.75 and a 1.5-ATR stop is ~$2.63, a $10 floor sits at
+roughly **+3.9R — above the current market price**. The next bar then satisfied
+`low <= stop` and booked an exit the market never reached.
+
+It reported **+0.595R expectancy and PF 2.46 on M15**, against a 0.171R cost
+floor. That impossibility is what gave it away. Corrected behaviour: do not
+trail at all until the trade is already past the minimum, and only then refuse
+to trail back below it. The same family drops to −0.023R once fixed.
+
+**Every "5/10 accepted" number produced before that fix was fictitious and has
+been discarded.**
+
+## Corrected results
+
+| Timeframe | Accepted |
+|---|---|
+| M15 | 0 / 10 |
+| H1 | 0 / 10 |
+| H4 | 0 / 10 |
+
+**Nothing clears the full acceptance bar under the ≥10 pip constraint.** The
+rules were set before these numbers were seen and were not relaxed afterwards.
+
+### The closest candidate
+
+`bos_choch` on H4 — pooled **+0.081R over 281 trades**, PF 1.22, 64% win, max
+drawdown 12.1R, **zero unstable parameters**, and train expectancy positive in
+all four folds (+0.10 to +0.14). It fails on one clause: test expectancy was
+positive in only 2 of 4 folds — though the two negatives were ≈breakeven
+(−0.045, −0.016) and the two positives were substantial (+0.223, +0.167).
+
+It ships **enabled but flagged `borderline: true`**, which makes
+`CStrategyHealth` start it in **PROBATION at half risk**. That is what the
+state machine is for: a positive expectancy that did not clear the consistency
+test is neither a validated edge nor worth discarding.
+
+Typical target: **11.9 pips**, minimum enforced 10.0.
+
+## Did the constraint help or hurt?
+
+Both. Per-trade expectancy improved — H4 `bos_choch` went from +0.031R to
++0.081R, and its drawdown fell from 16.5R to 12.1R, because the rule removes
+small-target trades whose reward never justified the cost. But it also cuts
+trade count, and with fewer trades per fold the consistency test became harder
+to pass. The constraint is sound; the dataset is the limit.
+
+## Honest bottom line
+
+The ≥10 pip requirement is **achievable and, on the evidence, beneficial** —
+but it does not manufacture an edge. After correcting the clamp bug, no
+strategy in this library clears the full bar on your XAUUSD data.
+
+The EA therefore ships with one borderline strategy on probation at half risk,
+and will spend most of its time in `NO_VALID_EDGE` doing nothing. That is the
+designed behaviour and the correct outcome for the evidence available.

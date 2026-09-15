@@ -220,7 +220,26 @@ public:
                         strategy_id, ctx.symbol);
         }
 
-      //--- 15. the stop must survive the spread ------------------------
+      //--- 15. the trade must be able to make the minimum target -------
+      //--- Where a target exists, it must clear the minimum. Where the
+      //--- strategy trails instead, 1R is the unit of a winner, so the
+      //--- STOP must clear it: a trade whose entire 1R is below the
+      //--- minimum cannot produce a qualifying winner however far it runs.
+      double pip   = m_cfg.Json().GetDouble("risk.pip_size", 1.00);
+      double min_t = m_cfg.Json().GetDouble("risk.min_target_pips", 0.0) * pip;
+      if(min_t > 0.0)
+        {
+         double reach = (sig.take_profit > 0.0
+                         ? MathAbs(sig.take_profit - entry_price)
+                         : signed_dist);
+         if(reach < min_t)
+            return Fail("MIN_TARGET",
+                        StringFormat("reach %.2f (%.1f pips) below minimum %.2f (%.1f pips)",
+                                     reach, reach / pip, min_t, min_t / pip),
+                        strategy_id, ctx.symbol);
+        }
+
+      //--- 16. the stop must survive the spread ------------------------
       double spread_price = ctx.spread_points * ctx.point;
       if(signed_dist < spread_price * 2.0)
          return Fail("STOP_INSIDE_SPREAD",

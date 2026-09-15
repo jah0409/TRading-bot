@@ -28,6 +28,19 @@ import regime_v2 as R2
 #: live risk manager rejects it outright
 MIN_STOP_ATR = 0.5
 
+#: XAUUSD pip size in USD. Brokers quote gold to 2 decimals, so 1 point =
+#: 0.01. The two conventions in common use are 1 pip = 0.10 (10 points) and
+#: 1 pip = 1.00 (100 points). We use the CONSERVATIVE one - 1 pip = 1.00 USD -
+#: so "at least 8-10 pips" is a real 8-10 dollar move, not 80 cents.
+PIP_USD = 1.00
+
+#: minimum move a winning trade must be able to make, in pips
+MIN_TARGET_PIPS = 10.0
+
+
+def min_target_usd() -> float:
+    return MIN_TARGET_PIPS * PIP_USD
+
 ALL_SESSIONS = ("ASIAN", "LONDON", "NEWYORK", "OVERLAP", "DEAD")
 ACTIVE_SESSIONS = ("LONDON", "NEWYORK", "OVERLAP")
 
@@ -88,7 +101,33 @@ class Strategy:
                 tp_l=None, tp_s=None, trail_mult=None, trail_gate_mult=1.0,
                 exit_l=None, exit_s=None):
         a = f["atr"].to_numpy(float)
-        c = f.index  # unused, kept for clarity
+        px = f["close"].to_numpy(float)
+
+        # --- MINIMUM TARGET GATE -------------------------------------------
+        # A winning trade must be able to make at least MIN_TARGET_PIPS.
+        #
+        # Where the strategy sets an explicit target, that distance must clear
+        # the minimum. Where it trails instead, 1R is the natural unit of a
+        # winner, so the STOP distance must clear it - a trade whose whole 1R
+        # is under the minimum cannot produce a qualifying winner however far
+        # it runs before the trail catches it.
+        #
+        # Signals that cannot reach the minimum are DROPPED, not stretched.
+        # Pushing a target out to a level the market was never going to reach
+        # just converts winners into losers.
+        need = min_target_usd()
+        if tp_l is not None:
+            reach_l = np.abs(np.asarray(tp_l, float) - px)
+        else:
+            reach_l = np.abs(px - np.asarray(stop_l, float))
+        if tp_s is not None:
+            reach_s = np.abs(px - np.asarray(tp_s, float))
+        else:
+            reach_s = np.abs(np.asarray(stop_s, float) - px)
+
+        long_sig = np.asarray(long_sig) & np.isfinite(reach_l) & (reach_l >= need)
+        short_sig = np.asarray(short_sig) & np.isfinite(reach_s) & (reach_s >= need)
+
         o["entry_dir"] = np.where(long_sig, 1, np.where(short_sig, -1, 0))
         o["entry_stop"] = np.where(long_sig, stop_l, np.where(short_sig, stop_s, np.nan))
         if tp_l is not None or tp_s is not None:

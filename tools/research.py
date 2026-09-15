@@ -80,8 +80,11 @@ def spread_series(f: pd.DataFrame, cost: CM.CostModel) -> np.ndarray:
 def score(cls, params, base, f, cost, spread, min_trades):
     st = cls(params)
     sig = st.build(base, f, f["regime"])
+    # min_exit_profit: a trailed exit must still bank the declared minimum
+    # target, otherwise a "10 pip minimum" quietly produces 3 pip winners
     res = BT.run(base, sig, f["regime"].to_numpy(), f["session"].to_numpy(),
-                 cost=cost, spread_arr=spread)
+                 cost=cost, spread_arr=spread,
+                 min_exit_profit=SV.min_target_usd())
     s = res.stats()
     if s["trades"] < min_trades:
         return -99.0, s, res
@@ -248,7 +251,8 @@ def null_check(cls, base, f, cost, spread, args, seeds=3):
         st = cls(dict(cls.spec.params))
         sig = st.build(fake, ff, ff["regime"])
         res = BT.run(fake, sig, ff["regime"].to_numpy(), ff["session"].to_numpy(),
-                     cost=cost, spread_arr=spread)
+                     cost=cost, spread_arr=spread,
+                     min_exit_profit=SV.min_target_usd())
         pooled.extend(res.r)
     r = np.asarray(pooled)
     if len(r) < 30:

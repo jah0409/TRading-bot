@@ -62,6 +62,7 @@ struct SBaseline
    double            max_dd_r;
    int               sample_trades;   // how many trades backed it
    string            evidence_tier;   // INSUFFICIENT / WEAK / MODERATE / STRONGER
+   bool              borderline;      // passed on expectancy, not on consistency
    bool              valid;
   };
 
@@ -202,9 +203,15 @@ public:
         }
 
       //--- a strategy whose evidence never reached the bar starts on
-      //--- probation rather than active, however good its numbers look
+      //--- probation rather than active, however good its numbers look.
+      //--- `borderline` covers the case that matters most in practice: a
+      //--- positive pooled expectancy that did NOT clear the consistency
+      //--- test. Those trade at half risk until live results earn more.
       if(!m_base.valid || m_base.evidence_tier == "INSUFFICIENT")
          SetState(STATE_PROBATION, "no validated baseline");
+      else if(m_base.borderline)
+         SetState(STATE_PROBATION, "borderline validation - positive expectancy "
+                  "but failed the fold-consistency test");
      }
 
    //--- accessors ------------------------------------------------------
