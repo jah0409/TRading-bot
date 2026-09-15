@@ -451,3 +451,52 @@ ALL = [TrendContinuation, TrendPullback, BreakoutRetest, VolatilityExpansion,
        MeanReversion, LiquiditySweepReversal, BosChochContinuation,
        FvgRetracement, SessionBreakout, PdhPdlReaction]
 BY_ID = {c.spec.id: c for c in ALL}
+
+
+# ---------------------------------------------------------------------------
+class ScalpSweepM5(Strategy):
+    """High-frequency SMC scalp: sweep a micro swing, enter the rejection.
+
+    Built to answer "can this trade 15x a day with a good R:R on XAUUSD".
+    Deliberately permissive - micro swings on M5, active sessions only, no
+    regime requirement beyond avoiding ABNORMAL - so that whatever limits the
+    frequency is the MARKET and the cost structure, not a filter I chose.
+    """
+    spec = Spec(
+        id="scalp_sweep_m5", version="1.0.0", timeframe="M5",
+        regimes=(R2.TRENDING_BULL, R2.TRENDING_BEAR, R2.RANGING, R2.BREAKOUT,
+                 R2.HIGH_VOLATILITY, R2.LOW_VOLATILITY, R2.TRANSITION, R2.UNKNOWN),
+        sessions=ACTIVE_SESSIONS,
+        description="Sweep of a micro swing high/low, rejection close, target N x risk",
+        params={"swing_k": 2, "stop_atr": 1.0, "rr": 2.0, "require_reject": 1},
+        grid={"swing_k": [1, 2, 3], "stop_atr": [0.5, 1.0, 1.5, 2.0],
+              "rr": [1.5, 2.0, 3.0], "require_reject": [0, 1]})
+
+    def build(self, df, f, regime, htf=None):
+        n = len(f); o = blank(n); p = self.p
+        ok = gate(f, regime, self.spec)
+        c = f["close"].to_numpy(float); a = f["atr"].to_numpy(float)
+        hi = f["high"].to_numpy(float); lo = f["low"].to_numpy(float)
+
+        k = int(p["swing_k"])
+        # micro swing levels: rolling extreme of the PRIOR k bars only
+        sh = pd.Series(hi).shift(1).rolling(k).max().to_numpy()
+        sl = pd.Series(lo).shift(1).rolling(k).min().to_numpy()
+
+        swept_hi = np.isfinite(sh) & (hi > sh) & (c < sh)   # raid up, close back under
+        swept_lo = np.isfinite(sl) & (lo < sl) & (c > sl)   # raid down, close back over
+        if p["require_reject"]:
+            swept_hi = swept_hi & f["rejection_bear"].to_numpy()
+            swept_lo = swept_lo & f["rejection_bull"].to_numpy()
+
+        S = ok & swept_hi
+        L = ok & swept_lo
+        stop_s = hi + p["stop_atr"] * a
+        stop_l = lo - p["stop_atr"] * a
+        return self._finish(o, f, L, S, stop_l, stop_s,
+                            tp_l=c + p["rr"] * (c - stop_l),
+                            tp_s=c - p["rr"] * (stop_s - c))
+
+
+ALL.append(ScalpSweepM5)
+BY_ID[ScalpSweepM5.spec.id] = ScalpSweepM5

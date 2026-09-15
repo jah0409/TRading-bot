@@ -238,3 +238,105 @@ strategy in this library clears the full bar on your XAUUSD data.
 The EA therefore ships with one borderline strategy on probation at half risk,
 and will spend most of its time in `NO_VALID_EDGE` doing nothing. That is the
 designed behaviour and the correct outcome for the evidence available.
+
+---
+
+# Addendum 2: can it take 15 trades a day?
+
+Asked directly, so tested directly. Short answer: **no, and the reason is not
+the one I expected.**
+
+## 1. The physical ceiling
+
+Gold moves a finite distance each day. From M5 data, 2022–2025:
+
+| | median |
+|---|---|
+| Net daily range (high − low) | **$26** |
+| Total path length (sum of all M5 moves) | **$194** |
+
+Path length is the theoretical maximum any strategy could extract, and no
+strategy gets near it — you enter late, exit early, and losing trades consume
+path too. Above roughly a third of path is not realistic.
+
+| Ask | Needs | % of daily path | |
+|---|---|---|---|
+| 15 trades × $10 target | $150 | **77%** | impossible |
+| 15 × $5 | $75 | 39% | very hard |
+| 15 × $3 | $45 | 23% | possible |
+| 5 × $10 | $50 | 26% | possible |
+
+So 15 trades a day **and** a 10-pip target cannot coexist. You can have one.
+
+## 2. The cost wall
+
+To reach 15/day you need M5 or faster. Cost drag there:
+
+| Stop | Cost as % of stop | Cost in R |
+|---|---|---|
+| $1 | 38% | **0.450** |
+| $2 | 19% | 0.225 |
+| $3 | 12.7% | 0.150 |
+| $5 | 7.6% | 0.090 |
+
+M5 median ATR is $1.30. A stop wide enough to make costs tolerable is 2.3×
+ATR — not a scalp stop, and it needs $6+ of movement to pay, which takes time
+and cuts frequency straight back down.
+
+## 3. What an actual scalper does
+
+`ScalpSweepM5` was built for this test: sweep a micro swing, enter the
+rejection, target N × risk. Deliberately permissive — micro swings, active
+sessions, no regime filter beyond avoiding ABNORMAL — so that whatever limits
+it is the market, not a filter chosen by me. 27 configurations, M5,
+2022–2025, 886 trading days.
+
+| swing_k | stop | RR | trades/day | median target | **gross** | net (std) | net (ECN) |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.5 | 1.5 | **12.2** | $2.54 | −0.003 | −0.238 | −0.151 |
+| 1 | 1.0 | 1.5 | 8.2 | $3.70 | +0.012 | −0.150 | −0.088 |
+| 2 | 2.0 | 2.0 | 3.3 | $8.05 | −0.002 | −0.099 | −0.060 |
+| 3 | 2.0 | 3.0 | 2.3 | $12.13 | +0.013 | −0.086 | −0.046 |
+
+Two things to read here.
+
+**The frequency ceiling is about 12/day**, not 15 — and only with a $2.54
+target, which is 2.5 pips, not 10.
+
+**More important: gross expectancy is zero.** Across all 27 configurations it
+ranges −0.027 to +0.013 R — noise around nothing, *before a cent of costs*.
+Costs then take another 0.09–0.27 R. Not one configuration is net positive at
+standard or ECN costs.
+
+That is the real finding. This is not an edge being eaten by spread; there is
+**no edge to eat**. The sweep-and-reject pattern on M5 micro-swings is noise.
+Making the costs cheaper does not fix a strategy whose gross expectancy is
+zero — it just loses more slowly.
+
+## 4. The frequency/quality frontier, as measured
+
+| Approach | Trades/day | Expectancy | Status |
+|---|---|---|---|
+| M5 scalp, max frequency | 12.2 | −0.238 R | loses |
+| M5 scalp, best config | 2.3 | −0.086 R | loses |
+| M15 liquidity sweep | ~0.9 | −0.061 R | loses |
+| H4 liquidity sweep | ~0.25 | −0.047 R | loses |
+| **H4 bos_choch** | **0.11** | **+0.081 R** | **the only thing that works** |
+
+The pattern is consistent and it points one way: on this instrument, with
+these costs, **edge increases as frequency falls**.
+
+## 5. What would actually raise trade count
+
+Honest options, in order of how real they are:
+
+1. **More symbols.** The architecture already runs several. Ten instruments at
+   the validated rate is ~1 trade/day — not 15, but 10× more than now. Each
+   needs its own dataset and its own validation; nothing transfers.
+2. **More validated strategies.** Nine of ten failed. Finding more is
+   open-ended research, not a setting.
+3. **Accept the rate.** ~27 trades/year at +0.081 R, compounding slowly.
+
+What will *not* work: loosening filters to force activity. That experiment is
+already in this document — every M5 and M15 configuration tested, and all of
+them lose.
