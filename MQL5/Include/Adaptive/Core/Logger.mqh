@@ -22,9 +22,10 @@ enum ENUM_LOG_STREAM
    LOG_EQUITY,
    LOG_REGIME,
    LOG_STRATEGY,
-   LOG_RISK
+   LOG_RISK,
+   LOG_SWITCH
   };
-#define LOG_STREAM_COUNT 5
+#define LOG_STREAM_COUNT 6
 
 class CLogger
   {
@@ -99,10 +100,14 @@ public:
       m_names[LOG_REGIME]   = "regime";
       m_names[LOG_STRATEGY] = "strategy";
       m_names[LOG_RISK]     = "risk";
+      m_names[LOG_SWITCH]   = "switch";
 
       m_headers[LOG_TRADES] =
-         "time,session,event,strategy,symbol,magic,ticket,side,lots,price,sl,tp,"
-         "risk_money,risk_pct,r_multiple,pnl,regime,phase,news_state,reason";
+         "time,session,event,strategy,strategy_version,symbol,magic,ticket,side,lots,"
+         "price,sl,tp,risk_money,risk_pct,r_multiple,mfe_r,mae_r,pnl,"
+         "regime,h4_ctx,h1_ctx,m15_ctx,atr,adx,struct_state,market_session,"
+         "news_state,spread_pts,slippage_pts,phase,strategy_score,strategy_state,"
+         "exit_reason,why";
       m_headers[LOG_EQUITY] =
          "time,session,balance,equity,floating_pnl,day_pnl,day_pnl_pct,"
          "dd_from_initial_pct,dd_from_peak_pct,open_positions,open_risk_money,"
@@ -116,6 +121,10 @@ public:
       m_headers[LOG_RISK] =
          "time,session,event,strategy,symbol,reason,requested_lots,approved_lots,"
          "risk_money,risk_pct,equity,day_pnl_pct,dd_pct,detail";
+      m_headers[LOG_SWITCH] =
+         "time,session,previous_strategy,new_strategy,failure_reason,regime,"
+         "prev_score,new_score,portfolio_mode,risk_state,account_dd_pct,"
+         "daily_dd_pct,news_state,spread_pts,volatility_state,rationale";
      }
 
    void              Configure(const string dir, const bool enabled, const bool echo)
@@ -141,7 +150,58 @@ public:
       return true;
      }
 
-   //--- trade stream ---------------------------------------------------
+   //+---------------------------------------------------------------+
+   //| Full trade record (sect 26). Every column exists so a losing    |
+   //| run can be diagnosed afterwards without guessing what the EA    |
+   //| was looking at - including the rejected trades, which are       |
+   //| logged to the risk stream with their reason.                    |
+   //+---------------------------------------------------------------+
+   void              TradeFull(const string event, const string strategy, const string version,
+                               const string symbol, const long magic, const ulong ticket,
+                               const string side, const double lots, const double price,
+                               const double sl, const double tp, const double risk_money,
+                               const double risk_pct, const double r_multiple,
+                               const double mfe_r, const double mae_r, const double pnl,
+                               const string regime, const string h4, const string h1,
+                               const string m15, const double atr_v, const double adx_v,
+                               const string structure, const string mkt_session,
+                               const string news_state, const double spread_pts,
+                               const double slippage_pts, const int phase,
+                               const double score, const string state,
+                               const string exit_reason, const string why)
+     {
+      WriteRow(LOG_TRADES, StringFormat(
+         "%s,%s,%s,%s,%s,%s,%I64d,%I64u,%s,%.2f,%.5f,%.5f,%.5f,%.2f,%.4f,%.3f,%.3f,%.3f,"
+         "%.2f,%s,%s,%s,%s,%.5f,%.2f,%s,%s,%s,%.1f,%.1f,%d,%.4f,%s,%s,%s",
+         Stamp(), m_session_tag, Clean(event), Clean(strategy), Clean(version), symbol,
+         magic, ticket, side, lots, price, sl, tp, risk_money, risk_pct, r_multiple,
+         mfe_r, mae_r, pnl, Clean(regime), Clean(h4), Clean(h1), Clean(m15),
+         atr_v, adx_v, Clean(structure), Clean(mkt_session), Clean(news_state),
+         spread_pts, slippage_pts, phase, score, Clean(state),
+         Clean(exit_reason), Clean(why)));
+     }
+
+   //+---------------------------------------------------------------+
+   //| Strategy switch record (sect 27). Written whenever the active   |
+   //| set changes, so the research side can reconstruct why.          |
+   //+---------------------------------------------------------------+
+   void              Switch(const string prev, const string next, const string failure,
+                            const string regime, const double prev_score,
+                            const double next_score, const string portfolio_mode,
+                            const string risk_state, const double account_dd,
+                            const double daily_dd, const string news_state,
+                            const double spread_pts, const string vol_state,
+                            const string rationale)
+     {
+      WriteRow(LOG_SWITCH, StringFormat(
+         "%s,%s,%s,%s,%s,%s,%.4f,%.4f,%s,%s,%.4f,%.4f,%s,%.1f,%s,%s",
+         Stamp(), m_session_tag, Clean(prev), Clean(next), Clean(failure), Clean(regime),
+         prev_score, next_score, Clean(portfolio_mode), Clean(risk_state),
+         account_dd, daily_dd, Clean(news_state), spread_pts, Clean(vol_state),
+         Clean(rationale)));
+     }
+
+   //--- trade stream (compact form, kept for existing call sites) -------
    void              Trade(const string event, const string strategy, const string symbol,
                            const long magic, const ulong ticket, const string side,
                            const double lots, const double price, const double sl, const double tp,
@@ -149,11 +209,9 @@ public:
                            const double pnl, const string regime, const int phase,
                            const string news_state, const string reason)
      {
-      WriteRow(LOG_TRADES, StringFormat(
-                  "%s,%s,%s,%s,%s,%I64d,%I64u,%s,%.2f,%.5f,%.5f,%.5f,%.2f,%.4f,%.3f,%.2f,%s,%d,%s,%s",
-                  Stamp(), m_session_tag, Clean(event), Clean(strategy), symbol, magic, ticket,
-                  side, lots, price, sl, tp, risk_money, risk_pct, r_multiple, pnl,
-                  Clean(regime), phase, Clean(news_state), Clean(reason)));
+      TradeFull(event, strategy, "", symbol, magic, ticket, side, lots, price, sl, tp,
+                risk_money, risk_pct, r_multiple, 0, 0, pnl, regime, "", "", "",
+                0, 0, "", "", news_state, 0, 0, phase, 0, "", "", reason);
      }
 
    //--- equity heartbeat ------------------------------------------------

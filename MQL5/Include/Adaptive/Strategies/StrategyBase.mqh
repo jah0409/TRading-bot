@@ -27,6 +27,7 @@
 #include "../Risk/RiskManager.mqh"
 #include "../Execution/OrderExecutor.mqh"
 #include "../Portfolio/VirtualAccount.mqh"
+#include "../Portfolio/StrategyHealth.mqh"
 
 class CStrategyBase
   {
@@ -42,6 +43,8 @@ protected:
    CRiskManager     *m_risk;
    COrderExecutor   *m_exec;
    CVirtualAccount   m_account;
+   CStrategyHealth   m_health;
+   double            m_risk_mult;   // set by the gate each pass
 
    //--- Enablement is PER SYMBOL: XAUUSD can be trending while US100
    //--- ranges, so one global flag would let the second symbol's regime
@@ -132,7 +135,7 @@ public:
                      CStrategyBase(void) : m_id(""), m_type(""), m_magic(0), m_json_path(""),
                                            m_symbols_csv(""), m_cfg(NULL), m_log(NULL),
                                            m_risk(NULL), m_exec(NULL), m_last_entry_ok(false),
-                                           m_enabled(false), m_en_count(0), m_suitability(0.0),
+                                           m_enabled(false), m_en_count(0), m_risk_mult(1.0), m_suitability(0.0),
                                            m_min_suitability(0.5)
      {
       ArrayInitialize(m_last_bar, 0);
@@ -191,6 +194,9 @@ public:
    void              SetSuitability(const double s) { m_suitability = s; }
    double            MinSuitability(void) const { return m_min_suitability; }
    CVirtualAccount  *Account(void)           { return GetPointer(m_account); }
+   CStrategyHealth  *Health(void)            { return GetPointer(m_health); }
+   void              SetRiskMultiplier(const double m) { m_risk_mult = m; }
+   double            RiskMultiplier(void) const       { return m_risk_mult; }
 
    //--- read-and-clear: the orchestrator takes this immediately after a
    //--- successful TryEnter() so it can attribute the fill
@@ -387,7 +393,7 @@ public:
       intent.risk_pct    = 0.0;
 
       //--- THE GATE. Nothing reaches the broker without passing here.
-      SRiskVerdict v = m_risk.Approve(intent, ctx);
+      SRiskVerdict v = m_risk.Approve(intent, ctx, m_risk_mult);
       if(!v.approved)
          return false;
 

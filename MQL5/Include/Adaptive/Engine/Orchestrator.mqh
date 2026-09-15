@@ -28,6 +28,8 @@
 #include "../Regime/RegimeDetector.mqh"
 #include "../Risk/RiskManager.mqh"
 #include "../Risk/CorrelationModel.mqh"
+#include "../Risk/PortfolioState.mqh"
+#include "TradeGate.mqh"
 #include "../News/NewsFilter.mqh"
 #include "../Execution/OrderExecutor.mqh"
 #include "../Portfolio/PerformanceTracker.mqh"
@@ -58,6 +60,8 @@ private:
    COrderExecutor       m_exec;
    CPerformanceTracker  m_perf;
    CStrategyAllocator   m_alloc;
+   CPortfolioState      m_portfolio;
+   CTradeGate           m_gate;
 
    CStrategyBase       *m_strategies[];
 
@@ -271,6 +275,8 @@ public:
                   m_cfg.Json().GetInt("performance.confidence_trades", 20),
                   m_cfg.Json().GetDouble("performance.max_suitability_adjust", 0.5));
       m_alloc.Init(GetPointer(m_cfg), GetPointer(m_log), GetPointer(m_perf));
+      m_portfolio.Init(GetPointer(m_cfg), GetPointer(m_log));
+      m_gate.Init(GetPointer(m_cfg), GetPointer(m_log));
 
       //--- 3. strategies -------------------------------------------------
       int n = m_cfg.StrategyCount();
@@ -311,6 +317,24 @@ public:
          m_strategies[k] = s;
          m_perf.Register(sc.id);
          m_risk.RegisterStrategy(sc.magic, sc.id);
+
+         //--- the validated baseline from walk-forward. A strategy with no
+         //--- baseline, or one whose evidence tier never cleared the floor,
+         //--- starts on PROBATION rather than ACTIVE.
+         SBaseline bl;
+         string bp = sc.json_path + ".baseline";
+         bl.expectancy_r  = m_cfg.Json().GetDouble(bp + ".expectancy_r", 0.0);
+         bl.profit_factor = m_cfg.Json().GetDouble(bp + ".profit_factor", 0.0);
+         bl.win_rate      = m_cfg.Json().GetDouble(bp + ".win_rate", 0.0);
+         bl.max_dd_r      = m_cfg.Json().GetDouble(bp + ".max_dd_r", 0.0);
+         bl.sample_trades = m_cfg.Json().GetInt(bp + ".sample_trades", 0);
+         bl.evidence_tier = m_cfg.Json().GetString(bp + ".evidence", "INSUFFICIENT");
+         bl.valid         = m_cfg.Json().Exists(bp) && bl.expectancy_r > 0.0;
+         s.Health().Init(sc.id, GetPointer(m_cfg), GetPointer(m_log), bl);
+
+         if(!bl.valid)
+            m_log.Warn(StringFormat("strategy '%s' has no validated baseline - "
+                                    "starting on PROBATION at reduced risk", sc.id));
 
          m_log.Info(StringFormat("loaded strategy '%s' (%s) magic=%I64d symbols=%s",
                                  sc.id, sc.type, sc.magic, sc.symbols_csv));
@@ -381,6 +405,9 @@ public:
       //--- enforced across every symbol, not once per symbol
       m_alloc.BeginCycle();
 
+      //--- portfolio posture, recomputed every pass -------------------
+      UpdatePortfolioState();
+
       bool budget_spent = false;
 
       for(int si = 0; si < m_cfg.SymbolCount() && !budget_spent; si++)
@@ -428,14 +455,23 @@ public:
             //--- must be allowed to exit and trail them.
             s.ManagePositions(ctx);
 
-            if(s.IsEnabledFor(symbol) && !m_risk.IsDailyLocked() && !m_risk.IsKilled())
+            if(s.IsEnabledFor(symbol))
               {
-               if(s.TryEnter(ctx))
+               //--- THE GATE. Fifteen mandatory checks before the strategy
+               //--- is even asked for a signal.
+               SGateResult g = m_gate.Check(s.Id(), ctx, GetPointer(m_risk),
+                                            GetPointer(m_portfolio), s.Health(),
+                                            s.Suitability(), s.MinSuitability());
+               if(g.passed)
                  {
-                  STradeIntent filled;
-                  if(s.ConsumeLastEntry(filled))
-                     QueuePending(filled, snap.composite);
-                  m_risk.RecomputeExposure();   // budgets move immediately
+                  s.SetRiskMultiplier(g.risk_multiplier);
+                  if(s.TryEnter(ctx))
+                    {
+                     STradeIntent filled;
+                     if(s.ConsumeLastEntry(filled))
+                        QueuePending(filled, snap.composite);
+                     m_risk.RecomputeExposure();
+                    }
                  }
               }
 
@@ -468,6 +504,72 @@ public:
       //--- that missed its slice - do not skip past it.
       if(!budget_spent && ArraySize(m_strategies) > 0)
          m_rotation = (m_rotation + 1) % ArraySize(m_strategies);
+     }
+
+   //+---------------------------------------------------------------+
+   //| Count strategy health across the book and set the portfolio     |
+   //| mode. This is where "several strategies failing at once" gets   |
+   //| separated from "one strategy stopped working": the first is a   |
+   //| statement about the MARKET and the response is to stop, not to  |
+   //| rotate into a fourth way to lose.                               |
+   //+---------------------------------------------------------------+
+   void              UpdatePortfolioState(void)
+     {
+      int total = ArraySize(m_strategies);
+      int degraded = 0, cooling = 0, eligible = 0;
+      bool abnormal = false, spread_bad = false;
+
+      for(int i = 0; i < total; i++)
+        {
+         CStrategyHealth *h = m_strategies[i].Health();
+         ENUM_STRATEGY_STATE st = h.State();
+         if(st == STATE_PROBATION || st == STATE_REDUCED_RISK)
+            degraded++;
+         if(st == STATE_COOL_DOWN || st == STATE_DISABLED)
+            cooling++;
+         if(h.CanTrade() && m_strategies[i].IsEnabled())
+            eligible++;
+        }
+
+      //--- market-level sanity, across every traded symbol
+      for(int si = 0; si < m_cfg.SymbolCount(); si++)
+        {
+         string sym = m_cfg.SymbolAt(si);
+         SRegimeSnapshot snap;
+         if(m_regime.Snapshot(sym, snap))
+           {
+            for(int t = 0; t < TF_SLOT_COUNT; t++)
+               if(snap.tf[t].atr_expansion > m_cfg.Json().GetDouble(
+                     "regime.abnormal_atr_expansion", 3.0))
+                  abnormal = true;
+           }
+         MqlTick tk;
+         if(SymbolInfoTick(sym, tk))
+           {
+            double pt = SymbolInfoDouble(sym, SYMBOL_POINT);
+            double spread_pts = (pt > 0 ? (tk.ask - tk.bid) / pt : 0);
+            double cap = (StringFind(sym, "XAU") >= 0
+                          ? m_cfg.Risk().max_spread_points_xau
+                          : m_cfg.Risk().max_spread_points_idx);
+            if(spread_pts > cap * 2.0)
+               spread_bad = true;
+           }
+        }
+
+      m_portfolio.Update(total, degraded, cooling, eligible,
+                         m_risk.DrawdownPct(), abnormal, spread_bad);
+
+      //--- MARKET_UNSAFE is not a pause on new entries only: reduce the
+      //--- book as well, because the exposure already on is the problem.
+      if(m_portfolio.Mode() == MODE_MARKET_UNSAFE &&
+         m_cfg.Json().GetBool("portfolio.flatten_when_unsafe", false))
+        {
+         int closed = m_exec.CloseAll("MARKET_UNSAFE:" + m_portfolio.Reason());
+         if(closed > 0)
+            m_log.Risk("UNSAFE_FLATTEN", "", "", BLOCK_NONE, 0, 0, 0, 0,
+                       m_risk.Equity(), m_risk.DayPnlPct(), m_risk.DrawdownPct(),
+                       StringFormat("closed %d: %s", closed, m_portfolio.Reason()));
+        }
      }
 
    //+---------------------------------------------------------------+

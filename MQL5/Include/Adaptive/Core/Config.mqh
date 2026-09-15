@@ -216,6 +216,12 @@ public:
    SNewsConfig    News(void)    const { return m_news; }
    SExecConfig    Exec(void)    const { return m_exec; }
 
+   //--- evidence gates for risk-phase promotion (see risk ramp, sect 24)
+   int               Json_MinTrades(void)
+     { return m_json.GetInt("risk.ramp.advance_min_live_trades", 40); }
+   double            Json_MaxDd(void)
+     { return m_json.GetDouble("risk.ramp.advance_max_drawdown_pct", 3.0); }
+
    int               SymbolCount(void) const { return ArraySize(m_symbols); }
    string            SymbolAt(const int i) const
      {

@@ -1,7 +1,6 @@
 {
   "_comment": "AdaptiveEA configuration. Edit symbol names to match your broker.",
   "_version": "0.1.0",
-
   "account": {
     "firm": "LegionFunding",
     "login": 70188572,
@@ -12,9 +11,10 @@
     "drawdown_basis": "worst_of",
     "enforce_login_match": true
   },
-
-  "symbols": ["XAUUSD", "US100"],
-
+  "symbols": [
+    "XAUUSD",
+    "US100"
+  ],
   "risk": {
     "strategy_max_risk_pct": 1.0,
     "aggregate_stop_cap_pct": 6.0,
@@ -28,68 +28,79 @@
     "correlation_cap_pct": 2.0,
     "require_stop_loss": true,
     "min_stop_atr_mult": 0.5,
-
     "ramp": {
       "deployment_start": "2026.09.14 00:00",
       "phase1_risk_pct": 0.25,
-      "phase2_risk_pct": 0.50,
-      "phase3_risk_pct": 1.00,
+      "phase2_risk_pct": 0.5,
+      "phase3_risk_pct": 1.0,
       "phase1_max_strategies": 2,
       "phase2_max_strategies": 3,
       "phase3_max_strategies": 5,
       "auto_advance": true,
-      "advance_min_profit_pct": 0.0
-    }
+      "advance_min_profit_pct": 0.0,
+      "advance_min_live_trades": 40,
+      "advance_max_drawdown_pct": 3.0,
+      "_comment": "Time is a CEILING on the phase, never a reason to reach it. Promotion also needs profit, a live sample, acceptable drawdown and zero risk violations."
+    },
+    "min_reward_risk": 0.8
   },
-
   "regime": {
     "_comment": "Thresholds are SOFT RAMPS: score is 0 at _lo, 1 at _hi. Fit them per symbol with tools/calibrate_regime.py and paste the result into per_symbol below. See docs/CALIBRATION.md.",
     "atr_period": 14,
     "adx_period": 14,
     "atr_percentile_lookback": 100,
-
     "adx_trend_lo": 20.0,
     "adx_trend_hi": 35.0,
     "adx_range_lo": 15.0,
     "adx_range_hi": 28.0,
-    "di_spread_lo": 0.10,
-    "di_spread_hi": 0.40,
+    "di_spread_lo": 0.1,
+    "di_spread_hi": 0.4,
     "atr_vol_lo": 0.55,
     "atr_vol_hi": 0.85,
     "atr_expansion_lo": 1.15,
-    "atr_expansion_hi": 1.80,
+    "atr_expansion_hi": 1.8,
     "compression_lookback": 10,
-    "compression_min": 0.20,
-    "min_score_to_classify": 0.20,
-
+    "compression_min": 0.2,
+    "min_score_to_classify": 0.2,
     "_legacy_comment": "Kept so an un-calibrated config still works: the ramps above default to a band around these if omitted.",
     "adx_trend_threshold": 25.0,
     "adx_range_threshold": 20.0,
     "atr_high_percentile": 0.75,
     "atr_low_percentile": 0.25,
-
-    "tf_weight": { "M15": 0.25, "H1": 0.40, "H4": 0.35 },
+    "tf_weight": {
+      "M15": 0.25,
+      "H1": 0.4,
+      "H4": 0.35
+    },
     "min_composite_confidence": 0.45,
     "min_bars_in_regime": 2,
-
     "per_symbol": {
       "_comment": "Calibrated overrides go here, one block per symbol. Gold and a cash index do not share an ADX threshold. Empty = every symbol uses the defaults above.",
       "_example_XAUUSD": {
         "adx_trend_lo": 22.0,
         "adx_trend_hi": 31.0,
-        "atr_vol_lo": 0.50,
-        "atr_vol_hi": 0.80,
-        "min_score_to_classify": 0.20
+        "atr_vol_lo": 0.5,
+        "atr_vol_hi": 0.8,
+        "min_score_to_classify": 0.2
       }
     }
   },
-
   "news": {
     "enabled": true,
-    "tier_a": { "minutes_before": 60, "minutes_after": 60 },
-    "tier_b": { "minutes_before": 30, "minutes_after": 30 },
-    "caution": { "minutes_before": 120, "minutes_after": 120,
-                 "size_mult": 0.5, "stop_mult": 1.5 },
+    "tier_a": {
+      "minutes_before": 60,
+      "minutes_after": 60
+    },
+    "tier_b": {
+      "minutes_before": 30,
+      "minutes_after": 30
+    },
+    "caution": {
+      "minutes_before": 120,
+      "minutes_after": 120,
+      "size_mult": 0.5,
+      "stop_mult": 1.5
+    },
     "close_positions_on_blackout": true,
     "fail_closed_if_stale": true,
     "refresh_minutes": 60,
@@ -106,7 +117,6 @@
       "web_api_url": ""
     }
   },
-
   "execution": {
     "magic_base": 701885,
     "slippage_points": 20,
@@ -117,7 +127,6 @@
     "trail_on_tick": true,
     "order_comment_prefix": "ADPT"
   },
-
   "correlation": {
     "_comment": "Rolling correlation between traded symbols. Caps CONCENTRATED directional exposure; it never relaxes risk.aggregate_stop_cap_pct, which stays the plain sum of absolute stops.",
     "enabled": true,
@@ -127,26 +136,34 @@
     "refresh_minutes": 15,
     "assume_when_unknown": 1.0
   },
-
   "performance": {
     "confidence_trades": 20,
     "max_suitability_adjust": 0.5,
     "prune_min_trades": 40,
     "prune_min_expectancy_r": 0.0
   },
-
   "strategies": [
     {
       "id": "trend_ema",
       "type": "trend_follow_ema",
-      "enabled": true,
-      "symbols": ["XAUUSD", "US100"],
+      "enabled": false,
+      "symbols": [
+        "XAUUSD",
+        "US100"
+      ],
       "capital_weight": 1.0,
-      "min_suitability_to_run": 0.50,
-      "incompatible_with": ["range_fade", "mean_rev_bb"],
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [
+        "range_fade",
+        "mean_rev_bb"
+      ],
       "suitability": {
-        "UNKNOWN": 0.00, "TREND_UP": 0.90, "TREND_DOWN": 0.90,
-        "RANGE": 0.10, "BREAKOUT": 0.55, "CHOP_HIVOL": 0.05
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.9,
+        "TREND_DOWN": 0.9,
+        "RANGE": 0.1,
+        "BREAKOUT": 0.55,
+        "CHOP_HIVOL": 0.05
       },
       "params": {
         "timeframe_minutes": 60,
@@ -158,19 +175,30 @@
         "atr_stop_mult": 2.0,
         "trail_atr_mult": 2.5,
         "min_rr": 1.5
-      }
+      },
+      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
     },
     {
       "id": "mean_rev_bb",
       "type": "mean_reversion_bb",
-      "enabled": true,
-      "symbols": ["XAUUSD", "US100"],
+      "enabled": false,
+      "symbols": [
+        "XAUUSD",
+        "US100"
+      ],
       "capital_weight": 1.0,
-      "min_suitability_to_run": 0.50,
-      "incompatible_with": ["trend_ema", "momo_pullback"],
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [
+        "trend_ema",
+        "momo_pullback"
+      ],
       "suitability": {
-        "UNKNOWN": 0.00, "TREND_UP": 0.05, "TREND_DOWN": 0.05,
-        "RANGE": 0.90, "BREAKOUT": 0.05, "CHOP_HIVOL": 0.20
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.05,
+        "TREND_DOWN": 0.05,
+        "RANGE": 0.9,
+        "BREAKOUT": 0.05,
+        "CHOP_HIVOL": 0.2
       },
       "params": {
         "timeframe_minutes": 15,
@@ -180,39 +208,58 @@
         "rsi_oversold": 30.0,
         "rsi_overbought": 70.0,
         "stop_atr_mult": 1.0
-      }
+      },
+      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
     },
     {
       "id": "breakout_dc",
       "type": "breakout_donchian",
-      "enabled": true,
-      "symbols": ["XAUUSD", "US100"],
+      "enabled": false,
+      "symbols": [
+        "XAUUSD",
+        "US100"
+      ],
       "capital_weight": 1.0,
-      "min_suitability_to_run": 0.50,
+      "min_suitability_to_run": 0.5,
       "incompatible_with": [],
       "suitability": {
-        "UNKNOWN": 0.00, "TREND_UP": 0.60, "TREND_DOWN": 0.60,
-        "RANGE": 0.55, "BREAKOUT": 0.95, "CHOP_HIVOL": 0.10
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.6,
+        "TREND_DOWN": 0.6,
+        "RANGE": 0.55,
+        "BREAKOUT": 0.95,
+        "CHOP_HIVOL": 0.1
       },
       "params": {
         "timeframe_minutes": 15,
         "channel_bars": 20,
         "atr_stop_mult": 1.5,
         "trail_atr_mult": 2.0,
-        "min_atr_percentile": 0.60
-      }
+        "min_atr_percentile": 0.6
+      },
+      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
     },
     {
       "id": "momo_pullback",
       "type": "momentum_pullback",
-      "enabled": true,
-      "symbols": ["XAUUSD", "US100"],
+      "enabled": false,
+      "symbols": [
+        "XAUUSD",
+        "US100"
+      ],
       "capital_weight": 1.0,
       "min_suitability_to_run": 0.55,
-      "incompatible_with": ["mean_rev_bb", "range_fade"],
+      "incompatible_with": [
+        "mean_rev_bb",
+        "range_fade"
+      ],
       "suitability": {
-        "UNKNOWN": 0.00, "TREND_UP": 0.85, "TREND_DOWN": 0.85,
-        "RANGE": 0.10, "BREAKOUT": 0.35, "CHOP_HIVOL": 0.05
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.85,
+        "TREND_DOWN": 0.85,
+        "RANGE": 0.1,
+        "BREAKOUT": 0.35,
+        "CHOP_HIVOL": 0.05
       },
       "params": {
         "timeframe_minutes": 60,
@@ -225,20 +272,30 @@
         "pullback_atr": 0.75,
         "stop_atr_mult": 1.5,
         "trail_atr_mult": 2.0
-      }
+      },
+      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
     },
     {
       "id": "range_fade",
       "type": "range_fade_rsi",
       "enabled": false,
       "_enabled_note": "off until walk-forward tested; see docs/WALKFORWARD.md",
-      "symbols": ["XAUUSD"],
+      "symbols": [
+        "XAUUSD"
+      ],
       "capital_weight": 0.5,
-      "min_suitability_to_run": 0.60,
-      "incompatible_with": ["trend_ema", "momo_pullback"],
+      "min_suitability_to_run": 0.6,
+      "incompatible_with": [
+        "trend_ema",
+        "momo_pullback"
+      ],
       "suitability": {
-        "UNKNOWN": 0.00, "TREND_UP": 0.00, "TREND_DOWN": 0.00,
-        "RANGE": 0.70, "BREAKOUT": 0.00, "CHOP_HIVOL": 0.45
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.0,
+        "TREND_DOWN": 0.0,
+        "RANGE": 0.7,
+        "BREAKOUT": 0.0,
+        "CHOP_HIVOL": 0.45
       },
       "params": {
         "timeframe_minutes": 15,
@@ -248,7 +305,110 @@
         "stop_atr_mult": 2.0,
         "target_atr_mult": 1.0,
         "max_hold_bars": 8
+      },
+      "_disabled_reason": "did not pass walk-forward on XAUUSD - see docs/RESEARCH_RESULTS.md"
+    },
+    {
+      "id": "trend_continuation_h1",
+      "type": "trend_follow_ema",
+      "version": "2.0.0",
+      "enabled": true,
+      "_validated": "walk-forward H1, 396 out-of-sample trades",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.55,
+      "incompatible_with": [],
+      "timeframe": "H1",
+      "baseline": {
+        "expectancy_r": 0.038,
+        "profit_factor": 1.125,
+        "win_rate": 0.4823,
+        "max_dd_r": 13.93,
+        "sample_trades": 396,
+        "evidence": "STRONGER",
+        "verdict": "pooled +0.038R over 396 trades, positive in 3/4 folds, degradation +50%, 0.2 unstable params/fold"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.85,
+        "TREND_DOWN": 0.85,
+        "RANGE": 0.1,
+        "BREAKOUT": 0.55,
+        "CHOP_HIVOL": 0.05
+      },
+      "params": {
+        "stop_atr": 2.5,
+        "trail_atr": 1.5,
+        "rr": 2.0,
+        "min_adx": 22.0
+      }
+    },
+    {
+      "id": "bos_choch_h4",
+      "type": "breakout_donchian",
+      "version": "2.0.0",
+      "enabled": true,
+      "_validated": "walk-forward H4, 297 out-of-sample trades",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.55,
+      "incompatible_with": [],
+      "timeframe": "H4",
+      "baseline": {
+        "expectancy_r": 0.0308,
+        "profit_factor": 1.083,
+        "win_rate": 0.4747,
+        "max_dd_r": 16.51,
+        "sample_trades": 297,
+        "evidence": "STRONGER",
+        "verdict": "pooled +0.031R over 297 trades, positive in 3/4 folds, degradation +48%, 0.5 unstable params/fold"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.6,
+        "TREND_DOWN": 0.6,
+        "RANGE": 0.1,
+        "BREAKOUT": 0.55,
+        "CHOP_HIVOL": 0.05
+      },
+      "params": {
+        "window": 18,
+        "stop_atr": 1.0,
+        "trail_atr": 2.0,
+        "rr": 2.0
       }
     }
-  ]
+  ],
+  "_evidence_note": "Only strategies that PASSED walk-forward on real XAUUSD data are enabled. See docs/RESEARCH_RESULTS.md. Everything else ships disabled - that is the correct state for an unvalidated strategy, not a placeholder.",
+  "health": {
+    "_comment": "Strategy failure detection. Live results are compared against the VALIDATED baseline, not against zero.",
+    "min_sample_trades": 20,
+    "deterioration_fraction": 0.5,
+    "max_consecutive_losses": 6,
+    "max_dd_multiple": 1.5,
+    "cooldown_minutes": 240,
+    "recovery_trades": 15,
+    "recovery_expectancy_r": 0.0
+  },
+  "portfolio": {
+    "_comment": "Account posture. NO_VALID_EDGE is a legitimate resting state - the EA is allowed, and required, to sit flat.",
+    "degraded_for_preservation": 2,
+    "failures_for_unsafe": 3,
+    "unsafe_minutes": 120,
+    "preservation_dd_pct": 3.0,
+    "preservation_risk_mult": 0.5,
+    "preservation_confidence_bonus": 0.15,
+    "preservation_max_positions": 1,
+    "flatten_when_unsafe": false
+  },
+  "sessions": {
+    "_comment": "Data/server clock is EET/EEST (UTC+2/+3) - see docs/DATA_AUDIT.md. Hours below are SERVER hours. London opens ~10-11, NY ~15-16.",
+    "enabled": true,
+    "trade_from_hour": 9,
+    "trade_to_hour": 23
+  }
 }

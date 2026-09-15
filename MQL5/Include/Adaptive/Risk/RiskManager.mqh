@@ -66,6 +66,8 @@ private:
    SStrategyExposure m_exposure[];
 
    //--- state flags ---------------------------------------------------
+   int               m_live_trades;
+   int               m_violations_since_phase;
    bool              m_daily_locked;
    bool              m_killed;
    bool              m_flatten_requested;
@@ -191,6 +193,7 @@ public:
                                           m_dd_initial_pct(0), m_dd_peak_pct(0),
                                           m_effective_dd_pct(0), m_open_risk_money(0),
                                           m_open_risk_pct(0), m_open_positions(0),
+                                          m_live_trades(0), m_violations_since_phase(0),
                                           m_daily_locked(false), m_killed(false),
                                           m_flatten_requested(false),
                                           m_flatten_reason(BLOCK_NONE), m_phase(PHASE_MONTH_1) {}
@@ -398,14 +401,33 @@ public:
       if(months >= 3)      candidate = PHASE_MONTH_3;
       else if(months == 2) candidate = PHASE_MONTH_2;
 
-      //--- "gradually increase risk AS THE EA PROVES PROFITABLE":
-      //--- time alone does not promote; the account must be up.
+      //--- Time is a CEILING on the phase, never a reason to reach it.
+      //--- Promotion additionally requires: the account up by the
+      //--- configured margin, a real sample of live trades, drawdown
+      //--- inside tolerance, and no risk violation since the last
+      //--- promotion. A strategy set may sit at 0.25% indefinitely -
+      //--- that is a correct outcome, not a stalled one.
       if(m_cfg.Risk().phase_auto_advance && candidate > PHASE_MONTH_1)
         {
          double net_pct = (m_initial_balance > 0.0
                            ? (m_balance - m_initial_balance) / m_initial_balance * 100.0 : 0.0);
-         if(net_pct < m_cfg.Risk().phase_advance_min_profit_pct)
+         bool profitable = (net_pct >= m_cfg.Risk().phase_advance_min_profit_pct);
+         bool sampled    = (m_live_trades >= m_cfg.Json_MinTrades());
+         bool dd_ok      = (m_effective_dd_pct <= m_cfg.Json_MaxDd());
+         bool clean      = (m_violations_since_phase == 0);
+         if(!(profitable && sampled && dd_ok && clean))
+           {
             candidate = (ENUM_RISK_PHASE)MathMax((int)PHASE_MONTH_1, (int)candidate - 1);
+            if(m_log != NULL && candidate < m_phase)
+               m_log.Risk("PHASE_HELD", "", "", BLOCK_NONE, 0, 0, 0, 0, m_equity,
+                          m_day_pnl_pct, m_effective_dd_pct,
+                          StringFormat("profit %.2f%% (need %.2f%%), trades %d (need %d), "
+                                       "dd %.2f%% (max %.2f%%), violations %d",
+                                       net_pct, m_cfg.Risk().phase_advance_min_profit_pct,
+                                       m_live_trades, m_cfg.Json_MinTrades(),
+                                       m_effective_dd_pct, m_cfg.Json_MaxDd(),
+                                       m_violations_since_phase));
+           }
         }
 
       if(candidate != m_phase)
@@ -529,7 +551,8 @@ public:
    //+---------------------------------------------------------------+
    //| The gate. Every strategy calls this before every entry.        |
    //+---------------------------------------------------------------+
-   SRiskVerdict      Approve(STradeIntent &intent, const SMarketContext &ctx)
+   SRiskVerdict      Approve(STradeIntent &intent, const SMarketContext &ctx,
+                             const double external_risk_mult = 1.0)
      {
       SRiskVerdict v;
       v.approved      = false;
@@ -607,8 +630,18 @@ public:
         }
 
       //--- 6. size the trade ------------------------------------------
-      double risk_pct = PhaseRiskPct(m_phase) * ctx.news_size_mult;
+      //--- external_risk_mult carries the portfolio mode and the
+      //--- strategy's health state. It can only ever REDUCE size: the
+      //--- phase cap and the 1% per-strategy ceiling still bind above it.
+      double risk_pct = PhaseRiskPct(m_phase) * ctx.news_size_mult
+                        * MathMax(0.0, MathMin(1.0, external_risk_mult));
       risk_pct = MathMin(risk_pct, m_cfg.Risk().strategy_max_risk_pct);
+      if(risk_pct <= 0.0)
+        {
+         v.reason = BLOCK_TRADE_RISK_CAP;
+         v.detail = StringFormat("risk multiplier %.3f leaves no size", external_risk_mult);
+         return Reject(v, intent);
+        }
 
       string err = "";
       if(!CalcLots(intent, risk_pct, err))
@@ -853,6 +886,11 @@ public:
    ENUM_RISK_PHASE   Phase(void)           const { return m_phase; }
    double            CurrentRiskPct(void)  const { return PhaseRiskPct(m_phase); }
    int               MaxConcurrentStrategies(void) const { return PhaseMaxStrategies(m_phase); }
+
+   //--- fed by the orchestrator so phase promotion can require evidence
+   void              RecordLiveTrade(void)      { m_live_trades++; }
+   void              RecordRiskViolation(void)  { m_violations_since_phase++; }
+   int               LiveTrades(void)     const { return m_live_trades; }
 
    //--- deliberate manual intervention only
    void              ResetKillSwitch(const string who)
