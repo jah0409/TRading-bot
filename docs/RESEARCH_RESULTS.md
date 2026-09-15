@@ -340,3 +340,77 @@ Honest options, in order of how real they are:
 What will *not* work: loosening filters to force activity. That experiment is
 already in this document — every M5 and M15 configuration tested, and all of
 them lose.
+
+---
+
+# Addendum 3: the portfolio — daily trades, honestly
+
+You asked for trades every day. The way to get there is **more validated
+edges running together**, not one strategy forced to fire more often. That
+experiment is in Addendum 2 and every configuration lost money.
+
+## Every strategy × timeframe with non-negative out-of-sample expectancy
+
+Searched M30, H1 and H4 (M15 and M5 produced nothing positive):
+
+| combo | trades | expectancy |
+|---|---|---|
+| H4 trend_continuation | 177 | +0.099 R |
+| H4 bos_choch | 329 | +0.087 R |
+| H1 trend_continuation | 542 | +0.052 R |
+| H1 pdh_pdl_reaction | 518 | +0.030 R |
+| H4 session_breakout | 537 | +0.024 R |
+| H1 liquidity_sweep | 964 | +0.002 R |
+| M30 bos_choch | 1468 | +0.002 R |
+
+## The coverage/quality frontier
+
+Adding them best-first, 2014–2025, 2,951 trading days:
+
+| # | trades/day | **days with a trade** | trades/week | expectancy | total | max DD | **t** |
+|---|---|---|---|---|---|---|---|
+| 2 | 0.17 | 17% | 1 | +0.091 | +46 R | 13 R | **+2.33** |
+| 3 | 0.36 | 31% | 2 | +0.071 | +74 R | 21 R | **+2.43** |
+| 4 | 0.53 | 43% | 3 | +0.057 | +90 R | 30 R | **+2.15** |
+| **5** | **0.71** | **49%** | **3** | **+0.049** | **+103 R** | **40 R** | **+2.03** |
+| 6 | 1.04 | 62% | 5 | +0.034 | +105 R | 77 R | +1.58 |
+| 7 | 1.54 | **76%** | 8 | +0.024 | +107 R | 86 R | +1.34 |
+
+Two things stand out.
+
+**The portfolio is stronger than any of its parts.** Individually these were
+borderline — most failed the single-strategy consistency test. Combined, the
+5-strategy set reaches **t = +2.03**, statistically significant, which nothing
+achieved alone. Different strategies fail in different market conditions, and
+that is exactly what diversification is for.
+
+**Strategies 6 and 7 buy activity, not profit.** They lift coverage from 49%
+to 76% and trades from 3/week to 8/week — but total return rises only from
++103 R to +107 R over eleven years, while **max drawdown more than doubles,
+40 R to 86 R**, and statistical significance is lost. Four extra R for
+forty-six extra R of drawdown is a bad trade in every direction except how
+busy the screen looks.
+
+## What ships
+
+**Five strategies enabled** — the largest set that is statistically real:
+
+| strategy | timeframe | expectancy |
+|---|---|---|
+| `trend_continuation_h4` | H4 | +0.099 R |
+| `bos_choch_h4` | H4 | +0.087 R |
+| `trend_continuation_h1` | H1 | +0.052 R |
+| `pdh_pdl_reaction_h1` | H1 | +0.030 R |
+| `session_breakout_h4` | H4 | +0.024 R |
+
+Expect roughly **3 trades a week, on about half of all trading days**, with
+occasional runs of 4–5 in a day and occasional quiet weeks.
+
+**Two more sit in `config.json` disabled**, `liquidity_sweep_h1` and
+`bos_choch_m30`. Setting `"enabled": true` on both takes you to 76% of days
+and ~8 trades a week. The cost is stated in their `_note` and above: lower
+expectancy, double the drawdown, no extra profit. It is your account and the
+switch is one word — but the data says it buys activity, not money.
+
+All seven ship flagged `borderline`, so `CStrategyHealth` starts each one in
+**PROBATION at half risk** and only promotes on live evidence.

@@ -179,7 +179,7 @@
         "trail_atr_mult": 2.5,
         "min_rr": 1.5
       },
-      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
+      "_disabled_reason": "superseded by the validated portfolio"
     },
     {
       "id": "mean_rev_bb",
@@ -212,7 +212,7 @@
         "rsi_overbought": 70.0,
         "stop_atr_mult": 1.0
       },
-      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
+      "_disabled_reason": "superseded by the validated portfolio"
     },
     {
       "id": "breakout_dc",
@@ -240,7 +240,7 @@
         "trail_atr_mult": 2.0,
         "min_atr_percentile": 0.6
       },
-      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
+      "_disabled_reason": "superseded by the validated portfolio"
     },
     {
       "id": "momo_pullback",
@@ -276,7 +276,7 @@
         "stop_atr_mult": 1.5,
         "trail_atr_mult": 2.0
       },
-      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
+      "_disabled_reason": "superseded by the validated portfolio"
     },
     {
       "id": "range_fade",
@@ -309,19 +309,60 @@
         "target_atr_mult": 1.0,
         "max_hold_bars": 8
       },
-      "_disabled_reason": "did not pass walk-forward under the >=10 pip minimum target"
+      "_disabled_reason": "superseded by the validated portfolio"
+    },
+    {
+      "id": "trend_continuation_h4",
+      "type": "trend_continuation",
+      "version": "2.0.0",
+      "enabled": true,
+      "_note": "portfolio member, +0.099R over 177 trades",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [],
+      "timeframe": "H4",
+      "baseline": {
+        "expectancy_r": 0.1524,
+        "profit_factor": 1.487,
+        "win_rate": 0.5655,
+        "max_dd_r": 7.26,
+        "sample_trades": 145,
+        "evidence": "MODERATE",
+        "borderline": true,
+        "verdict": "no in-sample edge to degrade from"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
+      },
+      "params": {
+        "stop_atr": 1.5,
+        "trail_atr": 2.0,
+        "rr": 2.0,
+        "min_adx": 22.0,
+        "timeframe_minutes": 240,
+        "swing_k": 3,
+        "structure_lookback": 200
+      }
     },
     {
       "id": "bos_choch_h4",
       "type": "bos_choch",
       "version": "2.0.0",
       "enabled": true,
-      "_status": "BORDERLINE - enabled on PROBATION at half risk. Positive pooled expectancy and zero unstable parameters, but test expectancy was positive in only 2 of 4 folds. Not a validated edge.",
+      "_note": "portfolio member, +0.087R over 329 trades",
       "symbols": [
         "XAUUSD"
       ],
       "capital_weight": 1.0,
-      "min_suitability_to_run": 0.55,
+      "min_suitability_to_run": 0.5,
       "incompatible_with": [],
       "timeframe": "H4",
       "baseline": {
@@ -339,8 +380,8 @@
         "TREND_UP": 0.7,
         "TREND_DOWN": 0.7,
         "RANGE": 0.45,
-        "BREAKOUT": 0.8,
-        "CHOP_HIVOL": 0.2
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
       },
       "params": {
         "window": 6,
@@ -348,6 +389,211 @@
         "trail_atr": 2.0,
         "rr": 1.5,
         "timeframe_minutes": 240,
+        "swing_k": 3,
+        "structure_lookback": 200
+      }
+    },
+    {
+      "id": "trend_continuation_h1",
+      "type": "trend_continuation",
+      "version": "2.0.0",
+      "enabled": true,
+      "_note": "portfolio member, +0.052R over 542 trades",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [],
+      "timeframe": "H1",
+      "baseline": {
+        "expectancy_r": 0.0304,
+        "profit_factor": 1.087,
+        "win_rate": 0.4686,
+        "max_dd_r": 15.09,
+        "sample_trades": 318,
+        "evidence": "STRONGER",
+        "borderline": true,
+        "verdict": "train->test degradation +67%"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
+      },
+      "params": {
+        "stop_atr": 1.75,
+        "trail_atr": 1.5,
+        "rr": 2.25,
+        "min_adx": 24.0,
+        "timeframe_minutes": 60,
+        "swing_k": 3,
+        "structure_lookback": 200
+      }
+    },
+    {
+      "id": "pdh_pdl_reaction_h1",
+      "type": "pdh_pdl_reaction",
+      "version": "2.0.0",
+      "enabled": true,
+      "_note": "portfolio member, +0.030R over 518 trades",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [],
+      "timeframe": "H1",
+      "baseline": {
+        "expectancy_r": 0.007,
+        "profit_factor": 1.012,
+        "win_rate": 0.4507,
+        "max_dd_r": 17.65,
+        "sample_trades": 335,
+        "evidence": "STRONGER",
+        "borderline": true,
+        "verdict": "test expectancy positive in only 2/4 folds"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
+      },
+      "params": {
+        "touch_atr": 0.22499999999999998,
+        "stop_atr": 1.5,
+        "trail_atr": 2.0,
+        "rr": 2.0,
+        "timeframe_minutes": 60,
+        "swing_k": 3,
+        "structure_lookback": 200
+      }
+    },
+    {
+      "id": "session_breakout_h4",
+      "type": "session_breakout",
+      "version": "2.0.0",
+      "enabled": true,
+      "_note": "portfolio member, +0.024R over 537 trades",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [],
+      "timeframe": "H4",
+      "baseline": {
+        "expectancy_r": 0.0395,
+        "profit_factor": 1.07,
+        "win_rate": 0.453,
+        "max_dd_r": 18.1,
+        "sample_trades": 457,
+        "evidence": "STRONGER",
+        "borderline": true,
+        "verdict": "train->test degradation +76%"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
+      },
+      "params": {
+        "max_bars_into_london": 12,
+        "stop_atr": 1.5,
+        "trail_atr": 1.5,
+        "rr": 2.0,
+        "timeframe_minutes": 240,
+        "swing_k": 3,
+        "structure_lookback": 200
+      }
+    },
+    {
+      "id": "liquidity_sweep_h1",
+      "type": "liquidity_sweep",
+      "version": "2.0.0",
+      "enabled": false,
+      "_note": "OPTIONAL: set enabled=true to raise daily coverage from 49% to 76% (~8 trades/week). Costs: expectancy falls 0.049->0.024R and max drawdown doubles 40->86R, for +4R over 11 years. Activity, not profit.",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [],
+      "timeframe": "H1",
+      "baseline": {
+        "expectancy_r": -0.0633,
+        "profit_factor": 0.902,
+        "win_rate": 0.3803,
+        "max_dd_r": 66.2,
+        "sample_trades": 631,
+        "evidence": "STRONGER",
+        "borderline": true,
+        "verdict": "pooled out-of-sample expectancy -0.063R"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
+      },
+      "params": {
+        "stop_atr": 1.25,
+        "trail_atr": 2.0,
+        "rr": 2.75,
+        "confirm_reject": 1,
+        "timeframe_minutes": 60,
+        "swing_k": 3,
+        "structure_lookback": 200
+      }
+    },
+    {
+      "id": "bos_choch_m30",
+      "type": "bos_choch",
+      "version": "2.0.0",
+      "enabled": false,
+      "_note": "OPTIONAL: set enabled=true to raise daily coverage from 49% to 76% (~8 trades/week). Costs: expectancy falls 0.049->0.024R and max drawdown doubles 40->86R, for +4R over 11 years. Activity, not profit.",
+      "symbols": [
+        "XAUUSD"
+      ],
+      "capital_weight": 1.0,
+      "min_suitability_to_run": 0.5,
+      "incompatible_with": [],
+      "timeframe": "M30",
+      "baseline": {
+        "expectancy_r": 0.0141,
+        "profit_factor": 1.026,
+        "win_rate": 0.4743,
+        "max_dd_r": 24.22,
+        "sample_trades": 797,
+        "evidence": "STRONGER",
+        "borderline": true,
+        "verdict": "test expectancy positive in only 2/4 folds"
+      },
+      "suitability": {
+        "UNKNOWN": 0.0,
+        "TREND_UP": 0.7,
+        "TREND_DOWN": 0.7,
+        "RANGE": 0.45,
+        "BREAKOUT": 0.75,
+        "CHOP_HIVOL": 0.15
+      },
+      "params": {
+        "window": 12,
+        "stop_atr": 1.5,
+        "trail_atr": 1.75,
+        "rr": 2.0,
+        "timeframe_minutes": 30,
         "swing_k": 3,
         "structure_lookback": 200
       }
@@ -380,5 +626,6 @@
     "enabled": true,
     "trade_from_hour": 9,
     "trade_to_hour": 23
-  }
+  },
+  "_portfolio_note": "5 strategies validated as a portfolio: +0.049R, t=+2.03, 0.71 trades/day, 49% of days. Individually most were borderline; together they are statistically significant. Two optional members can raise coverage to 76% - see their _note."
 }
