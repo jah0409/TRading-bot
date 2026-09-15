@@ -14,6 +14,7 @@
 #include "BreakoutDonchian.mqh"
 #include "MomentumPullback.mqh"
 #include "RangeFadeRsi.mqh"
+#include "BosChochContinuation.mqh"
 
 class CStrategyFactory
   {
@@ -26,13 +27,14 @@ public:
       if(type == "breakout_donchian")  return new CBreakoutDonchian();
       if(type == "momentum_pullback")  return new CMomentumPullback();
       if(type == "range_fade_rsi")     return new CRangeFadeRsi();
+      if(type == "bos_choch")          return new CBosChochContinuation();
       return NULL;
      }
 
    static string     KnownTypes(void)
      {
       return "trend_follow_ema, mean_reversion_bb, breakout_donchian, "
-             "momentum_pullback, range_fade_rsi";
+             "momentum_pullback, range_fade_rsi, bos_choch";
      }
   };
 

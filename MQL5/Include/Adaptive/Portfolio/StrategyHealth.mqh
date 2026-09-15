@@ -181,6 +181,7 @@ public:
      {
       ArrayInitialize(m_r, 0.0);
       m_base.valid = false;
+      m_base.borderline = false;
      }
 
    void              Init(const string id, CConfig *cfg, CLogger *log, const SBaseline &base)

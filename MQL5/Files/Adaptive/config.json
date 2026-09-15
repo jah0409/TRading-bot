@@ -313,7 +313,7 @@
     },
     {
       "id": "bos_choch_h4",
-      "type": "breakout_donchian",
+      "type": "bos_choch",
       "version": "2.0.0",
       "enabled": true,
       "_status": "BORDERLINE - enabled on PROBATION at half risk. Positive pooled expectancy and zero unstable parameters, but test expectancy was positive in only 2 of 4 folds. Not a validated edge.",
@@ -346,7 +346,10 @@
         "window": 6,
         "stop_atr": 1.0,
         "trail_atr": 2.0,
-        "rr": 1.5
+        "rr": 1.5,
+        "timeframe_minutes": 240,
+        "swing_k": 3,
+        "structure_lookback": 200
       }
     }
   ],
