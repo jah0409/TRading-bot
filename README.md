@@ -3,7 +3,9 @@
 Regime-adaptive multi-strategy MetaTrader 5 Expert Advisor for **XAUUSD** and
 **US100**, with prop-firm risk enforcement and an economic-calendar filter.
 
-**New to MT5? Start with [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).**
+**Never used MetaTrader? Start here: [docs/SIMPLE_SETUP.md](docs/SIMPLE_SETUP.md)** — plain English, no jargon.
+
+**More detail: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).**
 
 **Read [ARCHITECTURE.md](ARCHITECTURE.md) for how it works.** This is a skeleton: the
 full flow is wired and the risk engine is real, but the regime thresholds and
